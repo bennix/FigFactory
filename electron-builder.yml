@@ -9,12 +9,15 @@ files:
   - src/**/*
   - package.json
   - '!src/assets/*.icns'
+  - '!**/.v8-cache/**'
 asar: true
 afterSign: scripts/notarize.cjs
 mac:
   category: public.app-category.graphics-design
   icon: src/assets/app-icon.icns
   identity: "ZHIPING XU (5N66S29EK2)"
+  signIgnore:
+    - \.lproj/locale\.pak$
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
@@ -36,6 +39,7 @@ nsis:
 linux:
   icon: src/assets/app-icon.png
   category: Graphics
+  maintainer: "FigFactory <bennix@users.noreply.github.com>"
   synopsis: AI image studio with pose references and layered PSD export
   target:
     - target: deb

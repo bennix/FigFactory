@@ -153,7 +153,7 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('#settings-dialog').close(); document.querySelector('#btn-generate').click()`);
     await until(`document.querySelector('#ai-error-details').hidden && !document.querySelector('#btn-generate').disabled`);
     assert.deepEqual(errors, []);
-    console.log('PASS: visible AI input/output, optional pose editor, inline results/history, figures, independent gender/shape, undo/redo, encrypted settings, image generation, zoom/copy, doodle editing, optimization pipeline, reload persistence and batch history deletion, layer planning, RGBA splitting, PSD export persistent light theme, sanitized 500 diagnostics, explicit retry recovery and separate text/image Key validation.');
+    console.log('PASS: visible AI input/output, optional pose editor, inline results/history, figures, independent gender/shape, undo/redo, encrypted settings, image generation, zoom/copy, doodle editing, optimization pipeline, reload persistence and batch history deletion, layer planning, RGBA splitting, PSD export persistent light theme, sanitized 500 diagnostics, explicit retry recovery and separate text/image Key validation and incremental SSE rendering.');
   } catch (error) { console.error(error); process.exitCode = 1; }
   finally { win.destroy(); fs.rmSync(temp, { recursive: true, force: true }); app.exit(process.exitCode || 0); }
 });
