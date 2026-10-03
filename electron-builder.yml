@@ -17,7 +17,7 @@ mac:
   icon: src/assets/app-icon.icns
   identity: "ZHIPING XU (5N66S29EK2)"
   signIgnore:
-    - \.lproj/locale\.pak$
+    - \.(pak|bin|dat)$
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
