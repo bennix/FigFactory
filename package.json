@@ -1,0 +1,34 @@
+{
+  "name": "body-factory",
+  "productName": "BodyFactory 形体工坊",
+  "version": "1.0.0",
+  "description": "AI image creation studio with pose references, image editing and layered PSD export",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "web": "python3 -m http.server 5173",
+    "test": "node --test tests/zenmux.cjs tests/psd.cjs tests/zenmux-errors.cjs tests/zenmux-stream.cjs",
+    "test:desktop": "electron tests/desktop.cjs",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "ag-psd": "^31.0.2",
+    "pngjs": "^7.0.0",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  },
+  "author": {
+    "name": "FigFactory contributors"
+  },
+  "homepage": "https://bennix.github.io/FigFactory/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bennix/FigFactory.git"
+  }
+}

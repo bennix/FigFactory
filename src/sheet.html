@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>sheet debug</title>
+<script type="importmap">{"imports":{"three":"../node_modules/three/build/three.module.js","three/addons/":"../node_modules/three/examples/jsm/"}}</script>
+<style>body{margin:0;background:#ddd;display:flex;flex-wrap:wrap;gap:4px;font:12px sans-serif}div{background:#fff;text-align:center}img{display:block}</style>
+</head><body>
+<script type="module">
+import * as THREE from 'three';
+import { Mannequin } from './js/mannequin.js';
+import { LineArtRenderer } from './js/lineart.js';
+import { PRESETS } from './js/poses.js';
+const params = new URLSearchParams(location.search);
+const view = params.get('view') || 'front';
+const size = Number(params.get('size') || 300);
+const only = params.get('only');
+const renderer = new THREE.WebGLRenderer();
+const m = new Mannequin();
+const art = new LineArtRenderer(renderer, m);
+const dirs = { front: [0, 0.3, 4], side: [4, 0.3, 0], three: [2.8, 0.6, 2.8], top: [0, 3, 2] };
+PRESETS.forEach((p, i) => {
+  if (only && !only.split(',').includes(String(i + 1))) return;
+  m.setPose(p.pose); m.snapToGround();
+  const cam = new THREE.PerspectiveCamera(28, 1, 0.05, 100);
+  const box = new THREE.Box3(); m.parts.forEach((x) => box.expandByObject(x));
+  const c = box.getCenter(new THREE.Vector3());
+  cam.position.copy(c).add(new THREE.Vector3(...dirs[view])); cam.lookAt(c); cam.updateMatrixWorld();
+  const cnv = art.renderImage(cam, { width: size, height: size, padding: 0.05 });
+  const d = document.createElement('div');
+  d.innerHTML = `<img src="${cnv.toDataURL()}"><b>${i + 1} ${p.name}</b>`;
+  document.body.appendChild(d);
+});
+</script></body></html>
