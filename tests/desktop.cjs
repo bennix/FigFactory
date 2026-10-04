@@ -69,6 +69,13 @@ app.whenReady().then(async () => {
     assert.equal(await run(`window.__bf.figures[1].gender`), 'female');
     await run(`document.querySelector('#btn-redo').click()`);
     assert.equal(await run(`window.__bf.figures[1].gender`), 'male');
+    await run(`document.querySelector('#figure-height').value = '190'; document.querySelector('#figure-height').dispatchEvent(new Event('change')); document.querySelector('#figure-weight').value = '90'; document.querySelector('#figure-weight').dispatchEvent(new Event('change'));`);
+    assert.ok(await run(`window.__bf.figures[1].shape.height === 190 && window.__bf.figures[1].shape.weight === 90 && window.__bf.figures[0].shape.height === 170 && Math.abs(window.__bf.figures[1].group.scale.y - 190 / 170) < 0.001 && Math.abs(window.__bf.figures[1].lowestPoint()) < 0.001`));
+    const previousWidth = await run(`window.__bf.mannequin.group.scale.x`);
+    await run(`document.querySelector('#figure-weight').value = '110'; document.querySelector('#figure-weight').dispatchEvent(new Event('change'));`);
+    assert.ok(await run(`window.__bf.mannequin.group.scale.x > ${previousWidth}`));
+    await run(`document.querySelector('#btn-undo').click()`);
+    assert.equal(await run(`window.__bf.mannequin.shape.weight`), 90);
     await run(`window.__bf.setFigureCount(2); document.querySelector('#btn-back-studio').click(); document.querySelector('#btn-settings').click(); document.querySelector('#ui-theme').value = 'light'; document.querySelector('#ui-theme').dispatchEvent(new Event('change')); document.querySelector('#api-key').value = 'desktop-test-key'; document.querySelector('#btn-save-ai').click();`);
     if (!safeStorage.isEncryptionAvailable()) throw new Error('OS secure storage unavailable');
     await until(`!document.querySelector('#settings-dialog').open`);
@@ -128,6 +135,7 @@ app.whenReady().then(async () => {
     assert.equal(await run(`getComputedStyle(document.documentElement).getPropertyValue('--text').trim()`), '#182338');
     assert.equal(await run(`window.__bf.figures.length`), 2);
     assert.equal(await run(`window.__bf.figures[1].gender`), 'male');
+    assert.ok(await run(`window.__bf.figures[1].shape.height === 190 && window.__bf.figures[1].shape.weight === 90`));
     await run(`document.querySelector('#btn-history').click()`);
     await until(`document.querySelectorAll('.history-card').length === 2`);
     await run(`document.querySelector('#history-all').click(); document.querySelector('#history-delete').click()`);

@@ -83,7 +83,7 @@ export class Mannequin {
     this.bones = {};
     this.parts = [];      // pickable body meshes
     this.inks = [];       // decorative ink lines
-    this.shape = { bust: 1, hips: 1, shoulders: 1, waist: 1, muscle: 1, headSize: 1 };
+    this.shape = { height: 170, weight: 65, bust: 1, hips: 1, shoulders: 1, waist: 1, muscle: 1, headSize: 1 };
     this._build();
   }
 
@@ -291,6 +291,10 @@ export class Mannequin {
   setShape(shape) {
     Object.assign(this.shape, shape);
     const s = this.shape;
+    const heightScale = s.height / 170;
+    const bmi = s.weight / (s.height / 100) ** 2;
+    const bodyWidth = Math.max(0.65, Math.min(1.7, Math.sqrt(bmi / (65 / 1.7 ** 2))));
+    this.group.scale.set(heightScale * bodyWidth, heightScale, heightScale * bodyWidth);
     const byKey = (k) => this.parts.find((p) => p.userData.key === k);
     const setS = (k, fx, fy = 1, fz = fx) => {
       const m = byKey(k); if (!m) return;
@@ -316,7 +320,7 @@ export class Mannequin {
       for (const k of ['upperArm', 'forearm', 'thigh', 'shin']) setS(k + side, s.muscle, 1, s.muscle);
       for (const k of ['shoulderBall', 'elbowBall', 'kneeBall']) setS(k + side, 0.85 + 0.15 * s.muscle);
     }
-    setS('head', s.headSize);
+    setS('head', s.headSize / bodyWidth, s.headSize, s.headSize / bodyWidth);
     // ink tubes inherit scaling; fine for small variations
     this.group.updateMatrixWorld(true);
   }
@@ -431,7 +435,7 @@ export class Mannequin {
 
   snapToGround() {
     const low = this.lowestPoint();
-    this.bones.root.position.y -= low;
+    this.bones.root.position.y -= low / this.group.scale.y;
     this.group.updateMatrixWorld(true);
   }
 

@@ -171,7 +171,7 @@ export async function setupAI({ poseImage, characters, toast }) {
     const people = characters();
     if (!$('#ai-use-pose').checked) return references.length ? '参考图中的人脸仅用于对应人物身份，忠实保留脸型、五官、肤色，不混合不同人物面孔；服饰参考只用于对应人物衣着。人物编号仅用于参考图绑定，不在最终图像中显示。' : '';
     for (const reference of references) if (!people.some(p => p.id === reference.person)) throw new Error(`参考图对应的人偶 ${reference.person} 已被移除，请删除该参考图。`);
-    return `画面中必须有 ${people.length} 个人物。人物资料：${JSON.stringify(people)}。人偶形态参考图仅用于各人物的姿态、体型比例、相对位置和相机视角，不复制人偶的裸露表面、塑料材质或关节结构。服装以用户提示词和对应服饰参考为准；用户未指定衣着时，人物默认穿着完整日常服装（上衣、长裤和鞋），身体由衣物自然遮盖，不生成裸体或内衣造型。最终人物的真实感或风格以用户提示词为准。人偶编号以形态参考图头部蓝色数字标签为准，最终图像不保留数字标签。人脸参考用于对应人物身份，忠实保留脸型、眼睛、鼻子、嘴唇、肤色和独特五官，不混合不同人物的面孔。服饰参考仅用于对应人物的衣着。`;
+    return `画面中必须有 ${people.length} 个人物。人物资料：${JSON.stringify(people)}（height 单位为厘米，weight 单位为公斤）。人偶形态参考图仅用于各人物的姿态、体型比例、相对位置和相机视角，不复制人偶的裸露表面、塑料材质或关节结构。服装以用户提示词和对应服饰参考为准；用户未指定衣着时，人物默认穿着完整日常服装（上衣、长裤和鞋），身体由衣物自然遮盖，不生成裸体或内衣造型。最终人物的真实感或风格以用户提示词为准。人偶编号以形态参考图头部蓝色数字标签为准，最终图像不保留数字标签。人脸参考用于对应人物身份，忠实保留脸型、眼睛、鼻子、嘴唇、肤色和独特五官，不混合不同人物的面孔。服饰参考仅用于对应人物的衣着。`;
   }
   function inputReferences() {
     const images = [], labels = [];

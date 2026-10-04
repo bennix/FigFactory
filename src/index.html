@@ -134,6 +134,9 @@
         <header><h2>人物 · 独立编辑</h2></header>
         <div class="form-grid"><label>人偶数量<select id="figure-count"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></label><label>当前人偶<select id="figure-select"></select></label></div>
         <label class="ai-field">性别<select id="figure-gender"><option value="female">女性</option><option value="male">男性</option></select></label>
+        <div class="form-grid"><label>身高（cm）<input id="figure-height" type="number" min="100" max="220" step="1" value="170" /></label><label>体重（kg）<input id="figure-weight" type="number" min="25" max="200" step="0.5" value="65" /></label></div>
+        <p class="ai-note" id="figure-bmi"></p>
+        <p class="ai-note">身高体重自动估算一般体型；肩宽、腰围和四肢仍可微调。</p>
         <p class="ai-note"><span class="gender-dot female"></span> 女性 <span class="gender-dot male"></span> 男性</p>
         <label class="switch"><input type="checkbox" id="style-gender" checked /><span></span>用颜色区分性别</label>
         <p class="ai-note">点击画面中的人偶，可单独调整关节、体型和位置。</p>

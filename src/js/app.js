@@ -427,6 +427,18 @@ function applyShape(shape, updateInputs = true) {
   scheduleThumbs();
   saveSettings();
 }
+function syncMeasurements() {
+  $('#figure-height').value = mannequin.shape.height;
+  $('#figure-weight').value = mannequin.shape.weight;
+  const bmi = mannequin.shape.weight / (mannequin.shape.height / 100) ** 2;
+  $('#figure-bmi').textContent = `BMI ${bmi.toFixed(1)} · ${bmi < 18.5 ? '偏瘦' : bmi < 25 ? '适中' : '偏丰满'}（体型近似）`;
+}
+for (const key of ['height', 'weight']) {
+  $(`#figure-${key}`).addEventListener('change', e => {
+    if (!e.target.reportValidity() || !e.target.value) { syncMeasurements(); return; }
+    applyShape({ [key]: Number(e.target.value) }); syncMeasurements(); pushHistory();
+  });
+}
 for (const k of shapeKeys) {
   const el = $(`#shape-${k}`);
   el.addEventListener('change', () => pushHistory());
@@ -449,6 +461,7 @@ function syncFigureUI() {
   select.replaceChildren(...figures.map((m, i) => new Option(`人偶 ${i + 1}`, i)));
   select.value = activeFigure;
   $('#figure-gender').value = mannequin.gender;
+  syncMeasurements();
   for (const k of shapeKeys) {
     const el = $(`#shape-${k}`); el.value = mannequin.shape[k];
     el.nextElementSibling.textContent = Math.round(mannequin.shape[k] * 100) + '%'; setRangeFill(el);
