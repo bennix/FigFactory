@@ -19,7 +19,8 @@ global.fetch = async (url, options) => {
   calls.push({ url, body, multipart: options.body instanceof FormData });
   if (url.endsWith('/chat/completions')) {
     const planner = body.messages[0].content[0].text.includes('只输出 JSON');
-    const content = planner ? JSON.stringify({ layers: ['文字', '文字底板', '主体', '背景'].map(name => ({ name, description: `保留${name}，其他区域透明。` })) }) : '## 优化后的提示词\n\n保留**人物身份**与构图。<img src=x onerror=alert(1)>';
+    const scene = body.messages[0].content[0].text.includes('只生成场景与照明提示词');
+    const content = scene ? '## 场景\nSCENE_TEST 咖啡馆\n\n## 照明\n暖色侧光与柔和补光' : planner ? JSON.stringify({ layers: ['文字', '文字底板', '主体', '背景'].map(name => ({ name, description: `保留${name}，其他区域透明。` })) }) : '## 优化后的提示词\n\n保留**人物身份**与构图。<img src=x onerror=alert(1)>';
     if (body.stream) return {
       ok: true, headers: { get: name => name === 'content-type' ? 'text/event-stream' : null },
       body: (async function* () {
@@ -89,7 +90,7 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('#ai-model').value = 'openai/gpt-image-2.5-flare'; document.querySelector('#ai-model').dispatchEvent(new Event('change')); document.querySelector('#ai-prompt').value = '两个人物的摄影参考'; document.querySelector('#btn-generate').click()`);
     await until(`!document.querySelector('#studio-image').hidden && !document.querySelector('#studio-edit').disabled`);
     assert.equal(await run(`document.querySelector('#image-dialog').open`), false);
-    assert.equal(await run(`document.querySelectorAll('.studio-history-card').length`), 1);
+    await until(`document.querySelectorAll('.studio-history-card').length === 1`);
     await run(`document.querySelector('#studio-edit').click()`);
     await until(`document.querySelector('#image-dialog').open`);
     assert.ok(calls[0].url.endsWith('/images/edits')); assert.equal(calls[0].body.images.length, 1); assert.equal(calls[0].multipart, true);
@@ -177,7 +178,7 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('#ai-prompt').value = '穿着参考风衣'; document.querySelector('#btn-optimize').click()`);
     assert.ok(await run(`document.querySelectorAll('.prompt-stage').length === 1 && document.querySelector('#ai-final-prompt').value === '' && JSON.parse(localStorage.getItem('bodyfactory.prompt-optimization')).runs.length === 1`));
     await until(`!document.querySelector('#btn-optimize').disabled`);
-    await run(`const transfer = new DataTransfer(); const canvas = document.createElement('canvas'); canvas.width = canvas.height = 2; canvas.getContext('2d').fillRect(0,0,2,2); const data = Uint8Array.from(atob(canvas.toDataURL().split(',')[1]), c => c.charCodeAt(0)); transfer.items.add(new File([data], 'coat.png', {type:'image/png'})); document.querySelector('#ref-file').files = transfer.files; document.querySelector('#ref-file').dispatchEvent(new Event('change'))`);
+    await run(`{ const transfer = new DataTransfer(); const canvas = document.createElement('canvas'); canvas.width = canvas.height = 2; canvas.getContext('2d').fillRect(0,0,2,2); const data = Uint8Array.from(atob(canvas.toDataURL().split(',')[1]), c => c.charCodeAt(0)); transfer.items.add(new File([data], 'coat.png', {type:'image/png'})); document.querySelector('#ref-file').files = transfer.files; document.querySelector('#ref-file').dispatchEvent(new Event('change')); }`);
     await until(`document.querySelectorAll('.ref-kind-select').length === 1`);
     await run(`document.querySelector('.ref-kind-select').value = 'clothing'; document.querySelector('.ref-kind-select').dispatchEvent(new Event('change')); document.querySelector('#btn-generate').click()`);
     await until(`!document.querySelector('#btn-generate').disabled`);
@@ -188,8 +189,30 @@ app.whenReady().then(async () => {
     await until(`!document.querySelector('#btn-generate').disabled`);
     assert.equal(calls.at(-1).body.images[1].image_url, clothingRequest.body.images[1].image_url);
     assert.ok(calls.at(-1).body.prompt.includes('服饰约束'));
+    await run(`document.querySelector('#ref-kind').value = 'scene'; document.querySelector('#ref-kind').dispatchEvent(new Event('change')); { const transfer = new DataTransfer(); const canvas = document.createElement('canvas'); canvas.width = canvas.height = 2; canvas.getContext('2d').fillStyle = 'red'; canvas.getContext('2d').fillRect(0,0,2,2); const data = Uint8Array.from(atob(canvas.toDataURL().split(',')[1]), c => c.charCodeAt(0)); transfer.items.add(new File([data], 'scene.png', {type:'image/png'})); document.querySelector('#ref-file').files = transfer.files; document.querySelector('#ref-file').dispatchEvent(new Event('change')); }`);
+    await until(`document.querySelectorAll('.ref-kind-select').length === 2`);
+    await run(`document.querySelector('#ai-scene-source').value = '咖啡馆'; document.querySelector('#ai-lighting-source').value = '暖色侧光'; document.querySelector('#btn-scene-prompt').click()`);
+    await until(`!document.querySelector('#btn-scene-prompt').disabled`);
+    assert.ok(calls.at(-1).body.messages[0].content[0].text.includes('光源位置和方向'));
+    assert.equal(calls.at(-1).body.messages[0].content.filter(part => part.type === 'image_url').length, 1);
+    assert.ok(await run(`document.querySelector('#scene-prompt-preview h2') && document.querySelector('#ai-scene-prompt').value.includes('暖色侧光')`));
+    await run(`document.querySelector('#ai-use-scene').checked = true; document.querySelector('#ai-use-scene').dispatchEvent(new Event('change')); document.querySelector('#btn-generate').click()`);
+    await until(`!document.querySelector('#btn-generate').disabled`);
+    assert.ok(calls.at(-1).body.prompt.includes('SCENE_TEST') && calls.at(-1).body.prompt.includes('服饰约束'));
+    assert.equal(calls.at(-1).body.images.length, 3);
+    assert.ok(calls.at(-1).body.prompt.includes('图片 3：场景与照明参考'));
+    await run(`document.querySelector('#btn-optimize').click()`);
+    await until(`!document.querySelector('#btn-optimize').disabled`);
+    await run(`document.querySelector('#ai-use-scene').checked = false; document.querySelector('#ai-use-scene').dispatchEvent(new Event('change')); document.querySelector('#btn-generate').click()`);
+    await until(`!document.querySelector('#btn-generate').disabled`);
+    assert.ok(!calls.at(-1).body.prompt.includes('SCENE_TEST'));
+    assert.equal(calls.at(-1).body.images.length, 2);
+    assert.equal(await run(`document.querySelector('#ai-final-prompt').value`), '');
+    win.reload(); await sleep(500);
+    await until('!!window.__bf && document.querySelector("#ai-model").options.length === 6');
+    assert.ok(await run(`!document.querySelector('#ai-use-scene').checked && document.querySelector('#ai-scene-prompt').value.includes('SCENE_TEST')`));
     assert.deepEqual(errors, []);
     console.log('PASS: visible AI input/output, optional pose editor, inline results/history, figures, independent gender/shape, undo/redo, encrypted settings, image generation, zoom/copy, doodle editing, optimization pipeline, reload persistence and batch history deletion, layer planning, RGBA splitting, PSD export persistent light theme, sanitized 500 diagnostics, explicit retry recovery and separate text/image Key validation and incremental SSE rendering.');
-  } catch (error) { console.error(error); process.exitCode = 1; }
+  } catch (error) { console.error(error); console.error('UI diagnostics:', await run(`JSON.stringify({status:document.querySelector('#ai-status').textContent, gallery:document.querySelectorAll('.studio-history-card').length, calls:document.querySelector('#studio-history-count').textContent})`)); process.exitCode = 1; }
   finally { win.destroy(); fs.rmSync(temp, { recursive: true, force: true }); app.exit(process.exitCode || 0); }
 });

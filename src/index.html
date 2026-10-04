@@ -199,14 +199,23 @@
           <label class="ai-field">最终提示词<textarea id="ai-final-prompt" rows="5" placeholder="优化后的最终提示词，可继续编辑…"></textarea></label>
           <div id="final-prompt-preview" class="markdown-output" aria-label="最终提示词 Markdown 预览"></div>
         </section>
-        <div class="form-grid"><label>参考类型<select id="ref-kind"><option value="face">人脸</option><option value="clothing">服饰</option></select></label><label>对应人偶<select id="ref-person"></select></label></div>
+        <div class="form-grid"><label>参考类型<select id="ref-kind"><option value="face">人脸</option><option value="clothing">服饰</option><option value="scene">场景</option></select></label><label>对应人偶<select id="ref-person"></select></label></div>
         <button class="ghost wide" id="btn-ref">＋ 添加参考图 / 粘贴图片</button>
         <input type="file" id="ref-file" accept="image/png,image/jpeg,image/webp" multiple hidden />
-        <div id="ref-thumbs" class="ref-thumbs"></div>
+        <div id="ref-thumbs" class="ref-thumbs"></div><p class="ai-note">缩略图下可修改参考类型；场景图由“场景与照明”开关控制，不绑定人偶。</p>
         <div id="studio-pose-reference">
           <div class="pose-ref-heading"><label class="switch"><input type="checkbox" id="ai-use-pose" /><span></span>形态参考</label><button class="link" id="btn-pose-editor">编辑人偶 ↗</button></div>
           <div class="pose-ref-content"><img id="studio-pose-preview" alt="可选的人物形态参考" /><div><strong id="studio-pose-count">1 个人偶</strong><p>仅参考姿态、体型与构图。<br/>未指定服装时默认日常穿着。</p></div></div>
         </div>
+        <section id="scene-settings">
+          <label class="switch"><input type="checkbox" id="ai-use-scene" /><span></span>场景与照明</label>
+          <label class="ai-field">场景描述<textarea id="ai-scene-source" rows="3" placeholder="例如：傍晚的街边咖啡馆，落地窗旁，背景简洁…"></textarea></label>
+          <label class="ai-field">灯光与照明<textarea id="ai-lighting-source" rows="3" placeholder="例如：左侧暖色夕阳、柔和正面补光、自然阴影…"></textarea></label>
+          <button class="ghost wide" id="btn-scene-prompt">AI 生成场景与照明提示词</button>
+          <p class="ai-note">使用上方选择的提示词优化模型；开启后附加到提示词优化和生图中。</p>
+          <label class="ai-field">场景与照明提示词<textarea id="ai-scene-prompt" rows="4" placeholder="可由 AI 生成，也可以直接填写或修改…"></textarea></label>
+          <div id="scene-prompt-preview" class="markdown-output" hidden aria-live="polite"></div>
+        </section>
         <label class="ai-field">出图比例<select id="studio-size"><option value="1024x1024">方形 · 1:1</option><option value="1024x1536">竖图 · 2:3</option><option value="1536x1024">横图 · 3:2</option></select></label>
         <p class="ai-note">人脸参考优先保留五官、脸型和身份特征；实际保真度取决于模型。</p>
         <button class="primary wide" id="btn-generate">生成图像</button>
