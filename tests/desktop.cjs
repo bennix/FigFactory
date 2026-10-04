@@ -11,6 +11,7 @@ let preflightCalls = [];
 let failNextImage = false;
 let unclearDoodle = false;
 let failAuto = false;
+let identityIssue = false;
 dialog.showSaveDialog = async (window, options) => ({ canceled: false, filePath: path.join(temp, options.filters[0].extensions[0] === 'psd' ? 'output.psd' : 'output.png') });
 global.fetch = async (url, options) => {
   let body;
@@ -25,7 +26,7 @@ global.fetch = async (url, options) => {
   if (url.endsWith('/chat/completions')) {
     const planner = body.messages[0].content[0].text.includes('只输出 JSON');
     const scene = body.messages[0].content[0].text.includes('只生成场景与照明提示词');
-    const content = preflight ? (failAuto ? '{}' : JSON.stringify({referenceReview:'REVIEW_ALL_REFERENCES',originalPrompt:'AUTO_MAIN',clothingPrompt:'AUTO_COAT',posePrompt:'AUTO_POSE',sceneSource:'AUTO_SCENE',lightingSource:'AUTO_LIGHT',scenePrompt:'AUTO_SCENE_PROMPT'})) : doodle ? JSON.stringify(unclearDoodle ? {instruction:'请补充圈选区域需要如何修改',needsClarification:true} : {instruction:'涂鸦要求：将袖口改成蓝色',needsClarification:false}) : scene ? '## 场景\nSCENE_TEST 咖啡馆\n\n## 照明\n暖色侧光与柔和补光' : planner ? JSON.stringify({ layers: ['文字', '文字底板', '主体', '背景'].map(name => ({ name, description: `保留${name}，其他区域透明。` })) }) : '## 优化后的提示词\n\n保留**人物身份**与构图。<img src=x onerror=alert(1)>';
+    const content = preflight ? (failAuto ? '{}' : JSON.stringify({identityIssues:identityIssue ? ['固定身份与当前修改要求冲突'] : [],referenceReview:'REVIEW_ALL_REFERENCES',originalPrompt:'AUTO_MAIN',clothingPrompt:'AUTO_COAT',posePrompt:'AUTO_POSE',sceneSource:'AUTO_SCENE',lightingSource:'AUTO_LIGHT',scenePrompt:'AUTO_SCENE_PROMPT'})) : doodle ? JSON.stringify(unclearDoodle ? {instruction:'请补充圈选区域需要如何修改',needsClarification:true} : {instruction:'涂鸦要求：将袖口改成蓝色',needsClarification:false}) : scene ? '## 场景\nSCENE_TEST 咖啡馆\n\n## 照明\n暖色侧光与柔和补光' : planner ? JSON.stringify({ layers: ['文字', '文字底板', '主体', '背景'].map(name => ({ name, description: `保留${name}，其他区域透明。` })) }) : '## 优化后的提示词\n\n保留**人物身份**与构图。<img src=x onerror=alert(1)>';
     if (body.stream) return {
       ok: true, headers: { get: name => name === 'content-type' ? 'text/event-stream' : null },
       body: (async function* () {
@@ -235,7 +236,8 @@ app.whenReady().then(async () => {
     const autoCount = preflightCalls.length;
     await run(`document.querySelector('#btn-generate').click()`);
     await until(`!document.querySelector('#btn-generate').disabled`);
-    assert.equal(preflightCalls.length, autoCount);
+    assert.equal(preflightCalls.length, autoCount + 1);
+    assert.ok(preflightCalls.at(-1).body.messages[0].content[0].text.includes('clothingPrompt') && preflightCalls.at(-1).body.messages[0].content[0].text.includes('posePrompt'));
     await run(`document.querySelector('#studio-edit').click()`);
     await until(`document.querySelector('#image-dialog').open`);
     await drawStroke();
@@ -268,19 +270,60 @@ app.whenReady().then(async () => {
     await until(`!document.querySelector('#btn-generate').disabled`);
     assert.equal(calls.length, beforeIncomplete);
     assert.ok(await run(`document.querySelector('#ai-status').textContent.includes('未补全')`));
+    failAuto = false;
     const beforeDisabled = preflightCalls.length;
     await run(`document.querySelector('#ai-use-pose').checked = false; document.querySelector('#ai-use-pose').dispatchEvent(new Event('change')); document.querySelector('#ai-use-scene').checked = false; document.querySelector('#ai-use-scene').dispatchEvent(new Event('change')); document.querySelector('#ai-prompt').value = '只做人像'; document.querySelector('#ai-clothing-prompt').value = 'MANUAL_COAT'; document.querySelector('#btn-generate').click()`);
     await until(`!document.querySelector('#btn-generate').disabled`);
-    assert.equal(preflightCalls.length, beforeDisabled);
+    assert.equal(preflightCalls.length, beforeDisabled + 1);
     assert.ok(calls.at(-1).body.prompt.includes('MANUAL_COAT') && !calls.at(-1).body.prompt.includes('AUTO_POSE') && !calls.at(-1).body.prompt.includes('AUTO_SCENE_PROMPT'));
     failAuto = false;
     const beforeFullReview = preflightCalls.length;
     await run(`document.querySelector('#ai-use-pose').checked = true; document.querySelector('#ai-use-scene').checked = true; for (const id of ['ai-pose-prompt','ai-clothing-prompt','ai-scene-source','ai-lighting-source','ai-scene-prompt']) document.querySelector('#'+id).value = 'MANUAL_'+id; document.querySelector('#ai-final-prompt').value = 'MANUAL_FINAL'; document.querySelector('#btn-generate').click()`);
     await until(`!document.querySelector('#btn-generate').disabled`);
     assert.equal(preflightCalls.length, beforeFullReview + 1);
-    assert.ok(preflightCalls.at(-1).body.messages[0].content[0].text.includes('键为 referenceReview，'));
+    assert.ok(preflightCalls.at(-1).body.messages[0].content[0].text.includes('键为 referenceReview、identityIssues。'));
     assert.ok(calls.at(-1).body.prompt.includes('REVIEW_ALL_REFERENCES') && calls.at(-1).body.prompt.includes('MANUAL_ai-scene-source') && calls.at(-1).body.prompt.includes('MANUAL_ai-lighting-source'));
     assert.equal(await run(`document.querySelector('#ai-pose-prompt').value`), 'MANUAL_ai-pose-prompt');
+    await run(`document.querySelector('#ai-identity-contract').value = '人偶 1 不可变：黑色头发、眼镜。禁止耳环。'; document.querySelector('#ai-identity-contract').dispatchEvent(new Event('input')); document.querySelector('#ref-kind').value = 'face'; document.querySelector('#ref-kind').dispatchEvent(new Event('change')); { const transfer = new DataTransfer(); const canvas = document.createElement('canvas'); canvas.width = canvas.height = 2; const data = Uint8Array.from(atob(canvas.toDataURL().split(',')[1]), c => c.charCodeAt(0)); transfer.items.add(new File([data], 'identity.png', {type:'image/png'})); document.querySelector('#ref-file').files = transfer.files; document.querySelector('#ref-file').dispatchEvent(new Event('change')); }`);
+    await until(`document.querySelectorAll('.ref-kind-select').length === 1`);
+    await run(`document.querySelector('#btn-generate').click()`);
+    await until(`!document.querySelector('#btn-generate').disabled`);
+    const anchorRequest = calls.at(-1);
+    assert.equal(anchorRequest.body.images.length, 2);
+    assert.ok(anchorRequest.body.prompt.includes('图片 1：人偶 1 的人脸身份锚点') && anchorRequest.body.prompt.includes('图片 2 是本次生图的人物姿态') && anchorRequest.body.prompt.includes('人偶 1 不可变：黑色头发、眼镜。禁止耳环。'));
+    assert.ok(await run(`!document.querySelector('#ai-request-review').hidden && document.querySelector('#ai-request-preview').textContent.includes('身份合同：最高优先级')`));
+    const beforeAnchorRepeat = preflightCalls.length;
+    await run(`document.querySelector('#btn-generate').click()`);
+    await until(`!document.querySelector('#btn-generate').disabled`);
+    assert.equal(preflightCalls.length, beforeAnchorRepeat + 1);
+    assert.equal(calls.at(-1).body.images[0].image_url, anchorRequest.body.images[0].image_url);
+    assert.equal(calls.at(-1).body.images.length, 2); // No previous generated image enters this request.
+    await run(`document.querySelector('#studio-edit').click()`);
+    await until(`document.querySelector('#image-dialog').open`);
+    await run(`document.querySelector('#edit-prompt').value = '只修改袖口颜色'; document.querySelector('#btn-edit-image').click()`);
+    await until(`!document.querySelector('#btn-edit-image').disabled`);
+    assert.equal(calls.at(-1).body.images.length, 2);
+    assert.equal(calls.at(-1).body.images[0].image_url, anchorRequest.body.images[0].image_url);
+    assert.ok(calls.at(-1).body.prompt.includes('唯一权威身份是图片 1') && calls.at(-1).body.prompt.includes('图片 2 是用户涂鸦后的工作图'));
+    await run(`document.querySelector('#image-dialog').close()`);
+    identityIssue = true;
+    const beforeIdentityFailure = calls.length;
+    await run(`document.querySelector('#btn-generate').click()`);
+    await until(`!document.querySelector('#btn-generate').disabled`);
+    assert.equal(calls.length, beforeIdentityFailure);
+    assert.ok(await run(`document.querySelector('#ai-status').textContent.includes('身份检查需要处理')`));
+    identityIssue = false;
+    await run(`{ const transfer = new DataTransfer(); const canvas = document.createElement('canvas'); canvas.width = canvas.height = 2; const data = Uint8Array.from(atob(canvas.toDataURL().split(',')[1]), c => c.charCodeAt(0)); transfer.items.add(new File([data], 'another-face.png', {type:'image/png'})); document.querySelector('#ref-file').files = transfer.files; document.querySelector('#ref-file').dispatchEvent(new Event('change')); }`);
+    await until(`document.querySelectorAll('.ref-kind-select').length === 2`);
+    const beforeDuplicate = preflightCalls.length;
+    await run(`document.querySelector('#btn-generate').click()`);
+    await until(`!document.querySelector('#btn-generate').disabled`);
+    assert.equal(preflightCalls.length, beforeDuplicate);
+    assert.equal(calls.length, beforeIdentityFailure);
+    assert.ok(await run(`document.querySelector('#ai-status').textContent.includes('多张人脸参考')`));
+    win.reload(); await sleep(500);
+    await until('!!window.__bf && document.querySelector("#ai-model").options.length === 6');
+    assert.equal(await run(`document.querySelector('#ai-identity-contract').value`), '人偶 1 不可变：黑色头发、眼镜。禁止耳环。');
     assert.deepEqual(errors, []);
     console.log('PASS: visible AI input/output, optional pose editor, inline results/history, figures, independent gender/shape, undo/redo, encrypted settings, image generation, zoom/copy, doodle editing, optimization pipeline, reload persistence and batch history deletion, layer planning, RGBA splitting, PSD export persistent light theme, sanitized 500 diagnostics, explicit retry recovery and separate text/image Key validation and incremental SSE rendering.');
   } catch (error) { console.error(error); console.error('UI diagnostics:', await run(`JSON.stringify({status:document.querySelector('#ai-status').textContent, gallery:document.querySelectorAll('.studio-history-card').length, calls:document.querySelector('#studio-history-count').textContent})`)); process.exitCode = 1; }

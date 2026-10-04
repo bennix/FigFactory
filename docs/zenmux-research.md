@@ -96,3 +96,7 @@ HTTP 500 不等同于 Key 无效。文字通过、生图失败时需要继续检
 此前将 Ming 系列配置为 Vertex `:predict` 是错误的。2026-10-04 核对官方模型页的供应商元数据：Design Layer 的 `suitable_api` 为 `images`，`api_protocols` 仅包含 `images`；普通 Design 同样使用 Images API。
 
 Design Layer 改用 `/api/v1/images/edits`，上传恰好一个文件，传入拆层提示词及 `output_format=png`，不发送 size、n 或 input_fidelity。普通 Design 使用 `/api/v1/images/generations`。应用加载旧设置时会纠正这两个模型的 Vertex 配置，请求适配器也按精确模型 ID 使用正确接口。无需删除 Key 或重建模型列表。模拟测试覆盖多层返回与 PSD 导出；实际平台调用还需确认。
+
+## GPT Image 2 身份参考参数
+
+OpenAI 官方 [Image prompting](https://developers.openai.com/api/docs/guides/image-prompting) 明确说明 `gpt-image-2` 输入图默认高保真，应省略 `input_fidelity`。应用对准确名称 `gpt-image-2` / `openai/gpt-image-2` 的 edits 请求与 multipart 上传均省略此参数；ZenMux 目录中的 2.5 型号保留现有已验证配置。每次生成使用当前上传的同一张权威人脸图，不自动用上一轮输出替换身份参考。

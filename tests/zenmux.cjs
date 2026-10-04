@@ -78,3 +78,12 @@ test('Text and image generation continue to send JSON; malformed edit inputs fai
   assert.deepEqual(JSON.parse(payload.body), built.body);
   assert.throws(() => requestPayload(buildRequest({ model, prompt: 'Draw', images: ['data:image/png;base64,invalid!'] })), /参考图片格式/);
 });
+
+test('GPT Image 2 omits input_fidelity in reference edits, including multipart transport', () => {
+  for (const id of ['gpt-image-2', 'openai/gpt-image-2']) {
+    const built = buildRequest({ model: { ...model, id }, prompt: 'Use the authoritative identity', images: [image] });
+    assert.ok(built.url.endsWith('/images/edits'));
+    assert.equal(built.body.input_fidelity, undefined);
+    assert.equal(requestPayload(built).body.get('input_fidelity'), null);
+  }
+});

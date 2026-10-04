@@ -17,7 +17,7 @@ function buildRequest({ model, prompt, images = [], purpose = 'image', stream = 
   const ming = ['inclusionai/ming-image-0.1-design', 'inclusionai/ming-image-0.1-design-layer'].includes(model.id);
   if (ming || model.protocol === 'openai-images') return {
     url: `${BASE}/images/${images.length ? 'edits' : 'generations'}`,
-    body: { model: model.id, prompt, output_format: 'png', ...(!ming ? { n: 1, size } : {}), ...(images.length ? { images: images.map(image_url => ({ image_url })), ...(!ming ? { input_fidelity: 'high' } : {}) } : {}) },
+    body: { model: model.id, prompt, output_format: 'png', ...(!ming ? { n: 1, size } : {}), ...(images.length ? { images: images.map(image_url => ({ image_url })), ...(!ming && !/^(?:openai\/)?gpt-image-2$/.test(model.id) ? { input_fidelity: 'high' } : {}) } : {}) },
   };
   const [provider, ...rest] = model.id.split('/');
   if (!rest.length) throw new Error('Vertex 模型名称必须为 provider/model。');
