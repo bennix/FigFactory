@@ -32,6 +32,11 @@ async function historyTransaction(mode, action) {
 
 export async function setupAI({ poseImage, characters, toast }) {
   const bridge = window.bodyFactory;
+  const posePreference = 'bodyfactory.use-pose';
+  $('#ai-use-pose').checked = localStorage.getItem(posePreference) === 'true';
+  const savePosePreference = () => localStorage.setItem(posePreference, String($('#ai-use-pose').checked));
+  $('#ai-use-pose').addEventListener('change', savePosePreference);
+  window.addEventListener('pose-reference-changed', savePosePreference);
   $('#ui-theme').value = document.documentElement.dataset.theme || 'dark';
   bridge?.setTheme?.($('#ui-theme').value);
   $('#ui-theme').onchange = e => {
@@ -171,13 +176,13 @@ export async function setupAI({ poseImage, characters, toast }) {
     const people = characters();
     if (!$('#ai-use-pose').checked) return references.length ? '参考图中的人脸仅用于对应人物身份，忠实保留脸型、五官、肤色，不混合不同人物面孔；服饰参考只用于对应人物衣着。人物编号仅用于参考图绑定，不在最终图像中显示。' : '';
     for (const reference of references) if (!people.some(p => p.id === reference.person)) throw new Error(`参考图对应的人偶 ${reference.person} 已被移除，请删除该参考图。`);
-    return `画面中必须有 ${people.length} 个人物。人物资料：${JSON.stringify(people)}（height 单位为厘米，weight 单位为公斤）。人偶形态参考图仅用于各人物的姿态、体型比例、相对位置和相机视角，不复制人偶的裸露表面、塑料材质或关节结构。服装以用户提示词和对应服饰参考为准；用户未指定衣着时，人物默认穿着完整日常服装（上衣、长裤和鞋），身体由衣物自然遮盖，不生成裸体或内衣造型。最终人物的真实感或风格以用户提示词为准。人偶编号以形态参考图头部蓝色数字标签为准，最终图像不保留数字标签。人脸参考用于对应人物身份，忠实保留脸型、眼睛、鼻子、嘴唇、肤色和独特五官，不混合不同人物的面孔。服饰参考仅用于对应人物的衣着。`;
+    return `【当前姿态强制约束】图片 1 是本次生图的唯一姿态与构图依据，优先于后续参考照片和提示词中冲突的动作描述。逐一匹配各人物的头部朝向、躯干倾斜、髋部位置、手臂与手掌位置、腿部弯曲和双脚位置；坐姿必须保持坐姿，不得改为站姿。后续人脸和服饰照片只提取身份或衣着，禁止复制它们的身体动作、站姿、相机视角或构图。画面中必须有 ${people.length} 个人物。人物资料：${JSON.stringify(people)}（height 单位为厘米，weight 单位为公斤）。人偶形态参考图仅用于各人物的姿态、体型比例、相对位置和相机视角，不复制人偶的裸露表面、塑料材质或关节结构。服装以用户提示词和对应服饰参考为准；用户未指定衣着时，人物默认穿着完整日常服装（上衣、长裤和鞋），身体由衣物自然遮盖，不生成裸体或内衣造型。最终人物的真实感或风格以用户提示词为准。人偶编号以形态参考图头部蓝色数字标签为准，最终图像不保留数字标签。人脸参考用于对应人物身份，忠实保留脸型、眼睛、鼻子、嘴唇、肤色和独特五官，不混合不同人物的面孔。服饰参考仅用于对应人物的衣着。`;
   }
   function inputReferences() {
     const images = [], labels = [];
-    if ($('#ai-use-pose').checked) { images.push(poseImage()); labels.push('图片 1：整个人偶场景，仅参考姿态、比例和构图，不参考裸露外观或材质，服装另按文字和服饰参考生成。'); }
+    if ($('#ai-use-pose').checked) { images.push(poseImage()); labels.push('图片 1：当前人偶姿态图，唯一姿态依据，必须严格匹配，禁止其他照片覆盖该姿态。不参考裸露外观或材质，服装另按文字和服饰参考生成。'); }
     for (const reference of references) {
-      images.push(reference.url); labels.push(`图片 ${images.length}：人偶 ${reference.person} 的${reference.kind === 'face' ? '人脸身份' : '服饰'}参考。`);
+      images.push(reference.url); labels.push(`图片 ${images.length}：人偶 ${reference.person} 的${reference.kind === 'face' ? '人脸身份' : '服饰'}参考，仅用于${reference.kind === 'face' ? '面部身份' : '衣服样式'}，忽略该照片的身体姿态与构图。`);
     }
     return { images, labels: labels.join('\n') };
   }

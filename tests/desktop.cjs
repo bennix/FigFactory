@@ -162,6 +162,18 @@ app.whenReady().then(async () => {
     assert.ok(await run(`document.querySelector('#key-validation').textContent.includes('文字：验证通过') && document.querySelector('#key-validation').textContent.includes('500')`));
     await run(`document.querySelector('#settings-dialog').close(); document.querySelector('#btn-generate').click()`);
     await until(`document.querySelector('#ai-error-details').hidden && !document.querySelector('#btn-generate').disabled`);
+    await run(`window.__bf.animateToPose(window.__bf.PRESETS.find(p => p.name === '坐姿').pose, 10000); document.querySelector('#ai-use-pose').checked = true; document.querySelector('#ai-use-pose').dispatchEvent(new Event('change')); document.querySelector('#btn-generate').click()`);
+    await until(`!document.querySelector('#btn-generate').disabled`);
+    const seatedRequest = calls.at(-1);
+    assert.ok(seatedRequest.body.prompt.includes('唯一姿态') && seatedRequest.body.prompt.includes('禁止复制') && seatedRequest.body.prompt.includes('坐姿或蹲姿'));
+    assert.ok(await run(`window.__bf.mannequin.getPose().bones.hipL[0] === -80`));
+    await run(`window.__bf.animateToPose(window.__bf.PRESETS[0].pose, 10000); document.querySelector('#btn-generate').click()`);
+    await until(`!document.querySelector('#btn-generate').disabled`);
+    assert.notEqual(calls.at(-1).body.images[0].image_url, seatedRequest.body.images[0].image_url);
+    assert.ok(!calls.at(-1).body.prompt.includes('坐姿或蹲姿'));
+    win.reload(); await sleep(500);
+    await until('!!window.__bf && document.querySelector("#ai-model").options.length === 6');
+    assert.equal(await run(`document.querySelector('#ai-use-pose').checked`), true);
     assert.deepEqual(errors, []);
     console.log('PASS: visible AI input/output, optional pose editor, inline results/history, figures, independent gender/shape, undo/redo, encrypted settings, image generation, zoom/copy, doodle editing, optimization pipeline, reload persistence and batch history deletion, layer planning, RGBA splitting, PSD export persistent light theme, sanitized 500 diagnostics, explicit retry recovery and separate text/image Key validation and incremental SSE rendering.');
   } catch (error) { console.error(error); process.exitCode = 1; }
