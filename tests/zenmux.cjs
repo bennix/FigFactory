@@ -87,3 +87,18 @@ test('GPT Image 2 omits input_fidelity in reference edits, including multipart t
     assert.equal(requestPayload(built).body.get('input_fidelity'), null);
   }
 });
+
+test('Grok 2.0 maps UI dimensions to native resolution and ratio for generation and reference edits', () => {
+  for (const protocol of ['openai-images', 'vertex-predict']) for (const [size, ratio] of [['1024x1024','1:1'],['1024x1536','2:3'],['1536x1024','3:2']]) for (const images of [[],[image]]) {
+    const built = buildRequest({model:{...model,id:'x-ai/grok-imagine-image-2.0',protocol},prompt:'Draw',size,images});
+    assert.ok(built.url.endsWith(images.length ? '/images/edits' : '/images/generations'));
+    assert.equal(built.body.resolution,'1k'); assert.equal(built.body.aspect_ratio,ratio);
+    for (const key of ['size','input_fidelity','output_format']) assert.equal(built.body[key],undefined);
+    const payload=requestPayload(built);
+    if (images.length) { assert.equal(payload.body.get('resolution'),'1k');assert.equal(payload.body.get('aspect_ratio'),ratio);assert.equal(payload.body.get('size'),null);assert.equal(payload.body.getAll('image[]').length,1); }
+    else assert.equal(JSON.parse(payload.body).resolution,'1k');
+  }
+});
+test('JPEG base64 output remains a JPEG reference instead of being labeled PNG',()=> {
+  assert.equal(readResponse({data:[{b64_json:'/9j/aGVsbG8='}]}).images[0],'data:image/jpeg;base64,/9j/aGVsbG8=');
+});

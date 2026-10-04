@@ -100,3 +100,7 @@ Design Layer 改用 `/api/v1/images/edits`，上传恰好一个文件，传入�
 ## GPT Image 2 身份参考参数
 
 OpenAI 官方 [Image prompting](https://developers.openai.com/api/docs/guides/image-prompting) 明确说明 `gpt-image-2` 输入图默认高保真，应省略 `input_fidelity`。应用对准确名称 `gpt-image-2` / `openai/gpt-image-2` 的 edits 请求与 multipart 上传均省略此参数；ZenMux 目录中的 2.5 型号保留现有已验证配置。每次生成使用当前上传的同一张权威人脸图，不自动用上一轮输出替换身份参考。
+
+## Grok Imagine Image 2.0 参数适配
+
+用户实际调用 `x-ai/grok-imagine-image-2.0` 返回 422：`resolution` 不接受 `1024x1024`，期望 `1k`、`2k`、`1.5k`。ZenMux [模型页](https://zenmux.ai/x-ai/grok-imagine-image-2.0) 确认支持生图与编辑；xAI [生图文档](https://docs.x.ai/developers/model-capabilities/images/generation) 将 `resolution` 与 `aspect_ratio` 分开，且支持 `response_format=b64_json`。对这个确切型号使用 OpenAI Images 入口，发送 `resolution=1k` 与当前画幅比例，不传 GPT 专属 `size`、`input_fidelity` 或 `output_format`。不自动重试付费生成。覆盖三种画幅、纯生图、参考编辑、multipart 和旧接口设置迁移；平台实际请求仍需重试确认。

@@ -14,6 +14,13 @@ function buildRequest({ model, prompt, images = [], purpose = 'image', stream = 
   if (model.id === 'inclusionai/ming-image-0.1-design-layer' && images.length !== 1) throw new Error('Ming Design Layer 必须接收恰好一张参考图。');
   if (images.length && !model.references) throw new Error('此模型不支持参考图，请更换模型或关闭参考图。');
   if (images.length > model.maxReferences) throw new Error(`此模型最多接收 ${model.maxReferences} 张参考图，当前 ${images.length} 张。`);
+  if (model.id === 'x-ai/grok-imagine-image-2.0') {
+    const [width, height] = size.split('x').map(Number);
+    return {
+      url: `${BASE}/images/${images.length ? 'edits' : 'generations'}`,
+      body: { model: model.id, prompt, n: 1, response_format: 'b64_json', resolution: '1k', aspect_ratio: width === height ? '1:1' : width > height ? '3:2' : '2:3', ...(images.length ? { images: images.map(image_url => ({ image_url })) } : {}) },
+    };
+  }
   const ming = ['inclusionai/ming-image-0.1-design', 'inclusionai/ming-image-0.1-design-layer'].includes(model.id);
   if (ming || model.protocol === 'openai-images') return {
     url: `${BASE}/images/${images.length ? 'edits' : 'generations'}`,
@@ -43,7 +50,7 @@ function readResponse(data, purpose) {
   }
   const images = [];
   for (const item of data.data || []) {
-    if (item.b64_json) images.push(`data:image/${data.output_format || 'png'};base64,${item.b64_json}`);
+    if (item.b64_json) images.push(`data:image/${data.output_format || (item.b64_json.startsWith('/9j/') ? 'jpeg' : 'png')};base64,${item.b64_json}`);
     else if (item.url) images.push(item.url);
   }
   for (const item of data.predictions || []) {

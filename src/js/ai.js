@@ -111,7 +111,7 @@ export async function setupAI({ poseImage, characters, toast }) {
     fillModelSelect('#ai-optimizer', models.filter(m => m.kind === 'text'));
     fillModelSelect('#layer-planner', models.filter(m => m.kind === 'text'));
     fillModelSelect('#layer-model', models.filter(m => m.kind === 'layer'));
-    $('#ai-model-note').textContent = models.find(m => m.id === $('#ai-model').value)?.note || '请确认该模型的接口和参考图能力。';
+    $('#ai-model-note').textContent = $('#ai-model').value === 'x-ai/grok-imagine-image-2.0' ? 'Grok 2.0：自动使用 1k 分辨率档位，按出图比例设置画幅，不发送 GPT 专属参数。' : models.find(m => m.id === $('#ai-model').value)?.note || '请确认该模型的接口和参考图能力。';
   }
   function updatePeople() {
     const select = $('#ref-person'), previous = select.value;

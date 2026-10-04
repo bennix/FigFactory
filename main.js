@@ -80,7 +80,7 @@ function readAISettings() {
   try {
     const data = JSON.parse(fs.readFileSync(settingsPath(), 'utf8'));
     if (Array.isArray(data.models)) for (const model of data.models) {
-      if (['inclusionai/ming-image-0.1-design', 'inclusionai/ming-image-0.1-design-layer'].includes(model.id) && model.protocol === 'vertex-predict') model.protocol = 'openai-images';
+      if (['inclusionai/ming-image-0.1-design', 'inclusionai/ming-image-0.1-design-layer', 'x-ai/grok-imagine-image-2.0'].includes(model.id) && model.protocol === 'vertex-predict') model.protocol = 'openai-images';
     }
     return data;
   }

@@ -330,6 +330,17 @@ app.whenReady().then(async () => {
     win.reload(); await sleep(500);
     await until('!!window.__bf && document.querySelector("#ai-model").options.length === 6');
     assert.equal(await run(`document.querySelector('#ai-identity-contract').value`), '人偶 1 不可变：黑色头发、眼镜。禁止耳环。');
+    await run(`document.querySelector('#btn-settings').click(); const row = document.querySelector('.model-row'); row.querySelector('[data-field=id]').value = 'x-ai/grok-imagine-image-2.0'; row.querySelector('[data-field=protocol]').value = 'vertex-predict'; row.querySelector('[data-field=references]').checked = true; row.querySelector('[data-field=maxReferences]').value = '16'; document.querySelector('#btn-save-ai').click()`);
+    await until(`!document.querySelector('#settings-dialog').open`);
+    win.reload(); await sleep(500);
+    await until('!!window.__bf && document.querySelector("#ai-model").options.length === 6');
+    assert.equal(await run(`window.bodyFactory.loadAISettings().then(s => s.models.find(m => m.id === 'x-ai/grok-imagine-image-2.0').protocol)`), 'openai-images');
+    await run(`document.querySelector('#ai-model').value = 'x-ai/grok-imagine-image-2.0'; document.querySelector('#ai-model').dispatchEvent(new Event('change')); document.querySelector('#ai-use-pose').checked = false; document.querySelector('#ai-use-scene').checked = false; document.querySelector('#ai-prompt').value = 'Grok test'; document.querySelector('#ai-final-prompt').value = ''; document.querySelector('#studio-size').value = '1536x1024'; document.querySelector('#btn-generate').click()`);
+    await until(`!document.querySelector('#btn-generate').disabled`);
+    assert.ok(calls.at(-1).url.endsWith('/images/generations'));
+    assert.equal(calls.at(-1).body.resolution,'1k');
+    assert.equal(calls.at(-1).body.aspect_ratio,'3:2');
+    assert.equal(calls.at(-1).body.size,undefined);
     assert.deepEqual(errors, []);
     console.log('PASS: visible AI input/output, optional pose editor, inline results/history, figures, independent gender/shape, undo/redo, encrypted settings, image generation, zoom/copy, doodle editing, optimization pipeline, reload persistence and batch history deletion, layer planning, RGBA splitting, PSD export persistent light theme, sanitized 500 diagnostics, explicit retry recovery and separate text/image Key validation and incremental SSE rendering.');
   } catch (error) { console.error(error); console.error('UI diagnostics:', await run(`JSON.stringify({status:document.querySelector('#ai-status').textContent, gallery:document.querySelectorAll('.studio-history-card').length, calls:document.querySelector('#studio-history-count').textContent})`)); process.exitCode = 1; }
