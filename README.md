@@ -27,7 +27,7 @@ npm run build:linux
 APPLE_KEYCHAIN_PROFILE=FigFactory-notary npm run build:mac
 ```
 
-macOS 本机构建需要 Developer ID Application 签名证书，并通过 `xcrun notarytool store-credentials` 将 Apple 公证认证存入钥匙串；不要把密码或证书提交到 Git。支持 Apple Silicon 与 Intel DMG。打包阶段公证并装订 `.app`；发布前另外公证、装订并验证 DMG。
+macOS 本机构建需要 Developer ID Application 签名证书，并通过 `xcrun notarytool store-credentials` 将 Apple 公证认证存入钥匙串；不要把密码或证书提交到 Git。支持 Apple Silicon 与 Intel DMG。构建钩子自动公证并装订 `.app`，随后公证、装订并通过 Gatekeeper 验证最终 DMG。认证仅从指定钥匙串 profile 读取。
 
 Windows 为 x64 NSIS 安装包，当前未进行 Windows 代码签名。Linux 提供 x64 DEB/RPM；系统须满足 Electron 的桌面运行要求。受限 Linux 钥匙串不可用时，应用不会明文保存 API Key。
 

@@ -12,6 +12,7 @@ files:
   - '!**/.v8-cache/**'
 asar: true
 afterSign: scripts/notarize.cjs
+afterAllArtifactBuild: scripts/notarize-dmg.cjs
 mac:
   category: public.app-category.graphics-design
   icon: src/assets/app-icon.icns
