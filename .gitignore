@@ -9,3 +9,4 @@ dist/
 *.pem
 .DS_Store
 *.log
+releases/
