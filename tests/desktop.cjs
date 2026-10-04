@@ -174,6 +174,20 @@ app.whenReady().then(async () => {
     win.reload(); await sleep(500);
     await until('!!window.__bf && document.querySelector("#ai-model").options.length === 6');
     assert.equal(await run(`document.querySelector('#ai-use-pose').checked`), true);
+    await run(`document.querySelector('#ai-prompt').value = '穿着参考风衣'; document.querySelector('#btn-optimize').click()`);
+    assert.ok(await run(`document.querySelectorAll('.prompt-stage').length === 1 && document.querySelector('#ai-final-prompt').value === '' && JSON.parse(localStorage.getItem('bodyfactory.prompt-optimization')).runs.length === 1`));
+    await until(`!document.querySelector('#btn-optimize').disabled`);
+    await run(`const transfer = new DataTransfer(); const canvas = document.createElement('canvas'); canvas.width = canvas.height = 2; canvas.getContext('2d').fillRect(0,0,2,2); const data = Uint8Array.from(atob(canvas.toDataURL().split(',')[1]), c => c.charCodeAt(0)); transfer.items.add(new File([data], 'coat.png', {type:'image/png'})); document.querySelector('#ref-file').files = transfer.files; document.querySelector('#ref-file').dispatchEvent(new Event('change'))`);
+    await until(`document.querySelectorAll('.ref-kind-select').length === 1`);
+    await run(`document.querySelector('.ref-kind-select').value = 'clothing'; document.querySelector('.ref-kind-select').dispatchEvent(new Event('change')); document.querySelector('#btn-generate').click()`);
+    await until(`!document.querySelector('#btn-generate').disabled`);
+    const clothingRequest = calls.at(-1);
+    assert.equal(clothingRequest.body.images.length, 2);
+    assert.ok(clothingRequest.body.prompt.includes('服饰约束') && clothingRequest.body.prompt.includes('图片 2：人偶 1 的服饰'));
+    await run(`document.querySelector('#btn-generate').click()`);
+    await until(`!document.querySelector('#btn-generate').disabled`);
+    assert.equal(calls.at(-1).body.images[1].image_url, clothingRequest.body.images[1].image_url);
+    assert.ok(calls.at(-1).body.prompt.includes('服饰约束'));
     assert.deepEqual(errors, []);
     console.log('PASS: visible AI input/output, optional pose editor, inline results/history, figures, independent gender/shape, undo/redo, encrypted settings, image generation, zoom/copy, doodle editing, optimization pipeline, reload persistence and batch history deletion, layer planning, RGBA splitting, PSD export persistent light theme, sanitized 500 diagnostics, explicit retry recovery and separate text/image Key validation and incremental SSE rendering.');
   } catch (error) { console.error(error); process.exitCode = 1; }

@@ -54,7 +54,7 @@ export async function setupAI({ poseImage, characters, toast }) {
   let promptState = { runs: [], final: '' };
   try {
     const saved = JSON.parse(localStorage.getItem(promptStorageKey));
-    if (saved && Array.isArray(saved.runs) && typeof saved.final === 'string') promptState = saved;
+    if (saved && Array.isArray(saved.runs) && typeof saved.final === 'string') promptState = { runs: saved.runs.slice(-1), final: saved.final };
   } catch { /* No saved optimization yet. */ }
   function markdown(element, text) {
     element.innerHTML = DOMPurify.sanitize(marked.parse(text || ''), { USE_PROFILES: { html: true } });
@@ -81,7 +81,7 @@ export async function setupAI({ poseImage, characters, toast }) {
     if (run.error) { const error = document.createElement('p'); error.textContent = run.error; section.append(error); }
     $('#prompt-runs').prepend(section); return outputs;
   }
-  promptState.runs.forEach(addPromptRun); showFinal();
+  promptState.runs.forEach(addPromptRun); showFinal(); savePrompts();
   $('#ai-final-prompt').oninput = e => {
     promptState.final = e.target.value; markdown($('#final-prompt-preview'), promptState.final); savePrompts();
   };
@@ -122,10 +122,13 @@ export async function setupAI({ poseImage, characters, toast }) {
     $('#ref-thumbs').replaceChildren(...references.map((reference, index) => {
       const box = document.createElement('div'); box.className = 'ref-thumb';
       const image = new Image(); image.src = reference.url; image.alt = '参考图';
-      const label = document.createElement('span'); label.textContent = `人偶 ${reference.person} · ${reference.kind === 'face' ? '人脸' : '服饰'}`;
+      const label = document.createElement('span'); label.textContent = `人偶 ${reference.person}`;
+      const kind = document.createElement('select'); kind.className = 'ref-kind-select'; kind.setAttribute('aria-label', `参考图 ${index + 1} 类型`);
+      kind.append(new Option('人脸', 'face'), new Option('服饰', 'clothing')); kind.value = reference.kind;
+      kind.onchange = () => { reference.kind = kind.value; };
       const remove = document.createElement('button'); remove.textContent = '×'; remove.title = '删除参考图';
       remove.onclick = () => { references.splice(index, 1); renderReferences(); };
-      box.append(image, remove, label); return box;
+      box.append(image, remove, label, kind); return box;
     }));
   }
   async function addFiles(files) {
@@ -174,9 +177,11 @@ export async function setupAI({ poseImage, characters, toast }) {
   }
   function scenePrompt() {
     const people = characters();
-    if (!$('#ai-use-pose').checked) return references.length ? '参考图中的人脸仅用于对应人物身份，忠实保留脸型、五官、肤色，不混合不同人物面孔；服饰参考只用于对应人物衣着。人物编号仅用于参考图绑定，不在最终图像中显示。' : '';
+    const clothing = references.filter(reference => reference.kind === 'clothing');
+    const clothingConstraint = clothing.length ? `【服饰约束】${clothing.map(reference => `人偶 ${reference.person}`).join('、')}必须穿着对应服饰参考图中的衣服，忠实匹配款式、颜色、材质、长度、领型和细节。服饰参考优先于旧提示词中冲突的衣着描述，不得替换为默认日常服装或人脸照片里的衣服；保持当前姿态，衣物自然随姿态变形。` : '';
+    if (!$('#ai-use-pose').checked) return references.length ? clothingConstraint + '参考图中的人脸仅用于对应人物身份，忠实保留脸型、五官、肤色，不混合不同人物面孔；服饰参考只用于对应人物衣着。人物编号仅用于参考图绑定，不在最终图像中显示。' : '';
     for (const reference of references) if (!people.some(p => p.id === reference.person)) throw new Error(`参考图对应的人偶 ${reference.person} 已被移除，请删除该参考图。`);
-    return `【当前姿态强制约束】图片 1 是本次生图的唯一姿态与构图依据，优先于后续参考照片和提示词中冲突的动作描述。逐一匹配各人物的头部朝向、躯干倾斜、髋部位置、手臂与手掌位置、腿部弯曲和双脚位置；坐姿必须保持坐姿，不得改为站姿。后续人脸和服饰照片只提取身份或衣着，禁止复制它们的身体动作、站姿、相机视角或构图。画面中必须有 ${people.length} 个人物。人物资料：${JSON.stringify(people)}（height 单位为厘米，weight 单位为公斤）。人偶形态参考图仅用于各人物的姿态、体型比例、相对位置和相机视角，不复制人偶的裸露表面、塑料材质或关节结构。服装以用户提示词和对应服饰参考为准；用户未指定衣着时，人物默认穿着完整日常服装（上衣、长裤和鞋），身体由衣物自然遮盖，不生成裸体或内衣造型。最终人物的真实感或风格以用户提示词为准。人偶编号以形态参考图头部蓝色数字标签为准，最终图像不保留数字标签。人脸参考用于对应人物身份，忠实保留脸型、眼睛、鼻子、嘴唇、肤色和独特五官，不混合不同人物的面孔。服饰参考仅用于对应人物的衣着。`;
+    return `${clothingConstraint}\n【当前姿态强制约束】图片 1 是本次生图的唯一姿态与构图依据，优先于后续参考照片和提示词中冲突的动作描述。逐一匹配各人物的头部朝向、躯干倾斜、髋部位置、手臂与手掌位置、腿部弯曲和双脚位置；坐姿必须保持坐姿，不得改为站姿。后续人脸和服饰照片只提取身份或衣着，禁止复制它们的身体动作、站姿、相机视角或构图。画面中必须有 ${people.length} 个人物。人物资料：${JSON.stringify(people)}（height 单位为厘米，weight 单位为公斤）。人偶形态参考图仅用于各人物的姿态、体型比例、相对位置和相机视角，不复制人偶的裸露表面、塑料材质或关节结构。服装以用户提示词和对应服饰参考为准；用户未指定衣着时，人物默认穿着完整日常服装（上衣、长裤和鞋），身体由衣物自然遮盖，不生成裸体或内衣造型。最终人物的真实感或风格以用户提示词为准。人偶编号以形态参考图头部蓝色数字标签为准，最终图像不保留数字标签。人脸参考用于对应人物身份，忠实保留脸型、眼睛、鼻子、嘴唇、肤色和独特五官，不混合不同人物的面孔。服饰参考仅用于对应人物的衣着。`;
   }
   function inputReferences() {
     const images = [], labels = [];
@@ -215,6 +220,10 @@ export async function setupAI({ poseImage, characters, toast }) {
     if (busy) return;
     setBusy(true);
     let run;
+    promptState = { runs: [], final: '' };
+    $('#prompt-runs').replaceChildren(); $('#prompt-process').hidden = true;
+    $('#ai-stream-output').hidden = true;
+    showFinal(); savePrompts();
     try {
       const source = $('#ai-prompt').value.trim(); if (!source) throw new Error('请先填写提示词。');
       const { images, labels } = inputReferences();
