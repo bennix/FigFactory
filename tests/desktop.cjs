@@ -25,7 +25,7 @@ global.fetch = async (url, options) => {
   if (url.endsWith('/chat/completions')) {
     const planner = body.messages[0].content[0].text.includes('只输出 JSON');
     const scene = body.messages[0].content[0].text.includes('只生成场景与照明提示词');
-    const content = preflight ? (failAuto ? '{}' : JSON.stringify({originalPrompt:'AUTO_MAIN',clothingPrompt:'AUTO_COAT',posePrompt:'AUTO_POSE',sceneSource:'AUTO_SCENE',lightingSource:'AUTO_LIGHT',scenePrompt:'AUTO_SCENE_PROMPT'})) : doodle ? JSON.stringify(unclearDoodle ? {instruction:'请补充圈选区域需要如何修改',needsClarification:true} : {instruction:'涂鸦要求：将袖口改成蓝色',needsClarification:false}) : scene ? '## 场景\nSCENE_TEST 咖啡馆\n\n## 照明\n暖色侧光与柔和补光' : planner ? JSON.stringify({ layers: ['文字', '文字底板', '主体', '背景'].map(name => ({ name, description: `保留${name}，其他区域透明。` })) }) : '## 优化后的提示词\n\n保留**人物身份**与构图。<img src=x onerror=alert(1)>';
+    const content = preflight ? (failAuto ? '{}' : JSON.stringify({referenceReview:'REVIEW_ALL_REFERENCES',originalPrompt:'AUTO_MAIN',clothingPrompt:'AUTO_COAT',posePrompt:'AUTO_POSE',sceneSource:'AUTO_SCENE',lightingSource:'AUTO_LIGHT',scenePrompt:'AUTO_SCENE_PROMPT'})) : doodle ? JSON.stringify(unclearDoodle ? {instruction:'请补充圈选区域需要如何修改',needsClarification:true} : {instruction:'涂鸦要求：将袖口改成蓝色',needsClarification:false}) : scene ? '## 场景\nSCENE_TEST 咖啡馆\n\n## 照明\n暖色侧光与柔和补光' : planner ? JSON.stringify({ layers: ['文字', '文字底板', '主体', '背景'].map(name => ({ name, description: `保留${name}，其他区域透明。` })) }) : '## 优化后的提示词\n\n保留**人物身份**与构图。<img src=x onerror=alert(1)>';
     if (body.stream) return {
       ok: true, headers: { get: name => name === 'content-type' ? 'text/event-stream' : null },
       body: (async function* () {
@@ -203,6 +203,12 @@ app.whenReady().then(async () => {
     assert.ok(calls.at(-1).body.prompt.includes('服饰约束'));
     await run(`document.querySelector('#ref-kind').value = 'scene'; document.querySelector('#ref-kind').dispatchEvent(new Event('change')); { const transfer = new DataTransfer(); const canvas = document.createElement('canvas'); canvas.width = canvas.height = 2; canvas.getContext('2d').fillStyle = 'red'; canvas.getContext('2d').fillRect(0,0,2,2); const data = Uint8Array.from(atob(canvas.toDataURL().split(',')[1]), c => c.charCodeAt(0)); transfer.items.add(new File([data], 'scene.png', {type:'image/png'})); document.querySelector('#ref-file').files = transfer.files; document.querySelector('#ref-file').dispatchEvent(new Event('change')); }`);
     await until(`document.querySelectorAll('.ref-kind-select').length === 2`);
+    assert.ok(await run(`document.querySelector('#ai-use-scene').checked && document.querySelectorAll('.ref-thumb span')[1].textContent.includes('已启用')`));
+    await run(`document.querySelector('#ai-final-prompt').value = '白色摄影棚背景'; document.querySelector('#btn-generate').click()`);
+    await until(`!document.querySelector('#btn-generate').disabled`);
+    assert.equal(calls.at(-1).body.images.length, 3);
+    assert.ok(calls.at(-1).body.prompt.includes('REVIEW_ALL_REFERENCES') && calls.at(-1).body.prompt.includes('必须应用该环境布局') && calls.at(-1).body.prompt.includes('不能以人偶截图') && calls.at(-1).body.prompt.includes('背景、环境和照明由场景参考'));
+    assert.ok(await run(`document.querySelector('#ai-reference-check').textContent.includes('场景已启用（1 张') && document.querySelector('#ai-scene-source').value === 'AUTO_SCENE'`));
     await run(`document.querySelector('#ai-scene-source').value = '咖啡馆'; document.querySelector('#ai-lighting-source').value = '暖色侧光'; document.querySelector('#btn-scene-prompt').click()`);
     await until(`!document.querySelector('#btn-scene-prompt').disabled`);
     assert.ok(calls.at(-1).body.messages[0].content[0].text.includes('光源位置和方向'));
@@ -210,7 +216,7 @@ app.whenReady().then(async () => {
     assert.ok(await run(`document.querySelector('#scene-prompt-preview h2') && document.querySelector('#ai-scene-prompt').value.includes('暖色侧光')`));
     await run(`document.querySelector('#ai-use-scene').checked = true; document.querySelector('#ai-use-scene').dispatchEvent(new Event('change')); document.querySelector('#btn-generate').click()`);
     await until(`!document.querySelector('#btn-generate').disabled`);
-    assert.ok(calls.at(-1).body.prompt.includes('SCENE_TEST') && calls.at(-1).body.prompt.includes('服饰约束'));
+    assert.ok(calls.at(-1).body.prompt.includes('SCENE_TEST') && calls.at(-1).body.prompt.includes('咖啡馆') && calls.at(-1).body.prompt.includes('暖色侧光') && calls.at(-1).body.prompt.includes('服饰约束'));
     assert.equal(calls.at(-1).body.images.length, 3);
     assert.ok(calls.at(-1).body.prompt.includes('图片 3：场景与照明参考'));
     await run(`document.querySelector('#btn-optimize').click()`);
@@ -218,6 +224,7 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('#ai-use-scene').checked = false; document.querySelector('#ai-use-scene').dispatchEvent(new Event('change')); document.querySelector('#btn-generate').click()`);
     await until(`!document.querySelector('#btn-generate').disabled`);
     assert.ok(!calls.at(-1).body.prompt.includes('SCENE_TEST'));
+    assert.ok(await run(`document.querySelector('#ai-reference-check').textContent.includes('1 张场景图不发送')`));
     assert.equal(calls.at(-1).body.images.length, 2);
     assert.equal(await run(`document.querySelector('#ai-final-prompt').value`), '');
     await run(`document.querySelector('#ai-use-scene').checked = true; document.querySelector('#ai-use-scene').dispatchEvent(new Event('change')); document.querySelector('#ai-scene-source').value = 'MANUAL_ROOM'; document.querySelector('#ai-lighting-source').value = ''; document.querySelector('#ai-scene-prompt').value = ''; document.querySelector('#ai-clothing-prompt').value = ''; document.querySelector('#ai-pose-prompt').value = ''; document.querySelector('#btn-generate').click()`);
@@ -266,6 +273,14 @@ app.whenReady().then(async () => {
     await until(`!document.querySelector('#btn-generate').disabled`);
     assert.equal(preflightCalls.length, beforeDisabled);
     assert.ok(calls.at(-1).body.prompt.includes('MANUAL_COAT') && !calls.at(-1).body.prompt.includes('AUTO_POSE') && !calls.at(-1).body.prompt.includes('AUTO_SCENE_PROMPT'));
+    failAuto = false;
+    const beforeFullReview = preflightCalls.length;
+    await run(`document.querySelector('#ai-use-pose').checked = true; document.querySelector('#ai-use-scene').checked = true; for (const id of ['ai-pose-prompt','ai-clothing-prompt','ai-scene-source','ai-lighting-source','ai-scene-prompt']) document.querySelector('#'+id).value = 'MANUAL_'+id; document.querySelector('#ai-final-prompt').value = 'MANUAL_FINAL'; document.querySelector('#btn-generate').click()`);
+    await until(`!document.querySelector('#btn-generate').disabled`);
+    assert.equal(preflightCalls.length, beforeFullReview + 1);
+    assert.ok(preflightCalls.at(-1).body.messages[0].content[0].text.includes('键为 referenceReview，'));
+    assert.ok(calls.at(-1).body.prompt.includes('REVIEW_ALL_REFERENCES') && calls.at(-1).body.prompt.includes('MANUAL_ai-scene-source') && calls.at(-1).body.prompt.includes('MANUAL_ai-lighting-source'));
+    assert.equal(await run(`document.querySelector('#ai-pose-prompt').value`), 'MANUAL_ai-pose-prompt');
     assert.deepEqual(errors, []);
     console.log('PASS: visible AI input/output, optional pose editor, inline results/history, figures, independent gender/shape, undo/redo, encrypted settings, image generation, zoom/copy, doodle editing, optimization pipeline, reload persistence and batch history deletion, layer planning, RGBA splitting, PSD export persistent light theme, sanitized 500 diagnostics, explicit retry recovery and separate text/image Key validation and incremental SSE rendering.');
   } catch (error) { console.error(error); console.error('UI diagnostics:', await run(`JSON.stringify({status:document.querySelector('#ai-status').textContent, gallery:document.querySelectorAll('.studio-history-card').length, calls:document.querySelector('#studio-history-count').textContent})`)); process.exitCode = 1; }

@@ -221,6 +221,7 @@
         <label class="ai-field">出图比例<select id="studio-size"><option value="1024x1024">方形 · 1:1</option><option value="1024x1536">竖图 · 2:3</option><option value="1536x1024">横图 · 3:2</option></select></label>
         <p class="ai-note">人脸参考优先保留五官、脸型和身份特征；实际保真度取决于模型。</p>
         <p class="ai-note">生图前自动检查已启用的参考，补全空的场景、照明、服饰和形态提示词；保留手动内容。</p>
+        <p id="ai-reference-check" class="ai-note" role="status">添加场景参考图时会自动开启场景与照明；主动关闭后不会发送场景参考。</p>
         <button class="primary wide" id="btn-generate">生成图像</button>
         <p id="ai-status" class="ai-note" role="status"></p>
       </section>

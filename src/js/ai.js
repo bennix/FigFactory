@@ -94,7 +94,8 @@ export async function setupAI({ poseImage, characters, toast }) {
     $('#studio-progress').hidden = !value;
     $('#btn-generate').textContent = value ? '处理中…' : '生成图像';
     ['#btn-generate', '#btn-optimize', '#btn-pipeline', '#btn-edit-image', '#btn-plan-layers', '#btn-discuss-layers', '#btn-split-layers', '#btn-scene-prompt'].forEach(id => { $(id).disabled = value; });
-    ['#ai-use-scene', '#ai-scene-source', '#ai-lighting-source', '#ai-scene-prompt', '#ai-clothing-prompt', '#ai-pose-prompt'].forEach(id => { $(id).disabled = value; });
+    ['#ai-use-pose', '#ai-prompt', '#ai-final-prompt', '#ai-model', '#ai-optimizer', '#ref-kind', '#ref-person', '#btn-ref', '#ai-use-scene', '#ai-scene-source', '#ai-lighting-source', '#ai-scene-prompt', '#ai-clothing-prompt', '#ai-pose-prompt'].forEach(id => { $(id).disabled = value; });
+    $('#ref-person').disabled = value || $('#ref-kind').value === 'scene';
     ['#studio-copy', '#studio-save', '#studio-edit', '#studio-layers'].forEach(id => { $(id).disabled = value || !currentImage; });
   }
   function fillModelSelect(id, list) {
@@ -124,16 +125,17 @@ export async function setupAI({ poseImage, characters, toast }) {
     $('#ref-thumbs').replaceChildren(...references.map((reference, index) => {
       const box = document.createElement('div'); box.className = 'ref-thumb';
       const image = new Image(); image.src = reference.url; image.alt = '参考图';
-      const label = document.createElement('span'); label.textContent = reference.kind === 'scene' ? '场景参考' : `人偶 ${reference.person}`;
+      const label = document.createElement('span'); label.textContent = reference.kind === 'scene' ? ($('#ai-use-scene').checked ? '场景参考 · 已启用' : '场景参考 · 已关闭') : `人偶 ${reference.person}`;
       const kind = document.createElement('select'); kind.className = 'ref-kind-select'; kind.setAttribute('aria-label', `参考图 ${index + 1} 类型`);
       kind.append(new Option('人脸', 'face'), new Option('服饰', 'clothing'), new Option('场景', 'scene')); kind.value = reference.kind;
-      kind.onchange = () => { reference.kind = kind.value; renderReferences(); saveScene(); };
+      kind.onchange = () => { if (busy) { kind.value = reference.kind; return; } reference.kind = kind.value; if (reference.kind === 'scene') $('#ai-use-scene').checked = true; renderReferences(); saveScene(); };
       const remove = document.createElement('button'); remove.textContent = '×'; remove.title = '删除参考图';
-      remove.onclick = () => { references.splice(index, 1); renderReferences(); saveScene(); };
+      remove.onclick = () => { if (busy) return; references.splice(index, 1); renderReferences(); saveScene(); };
       box.append(image, remove, label, kind); return box;
     }));
   }
   async function addFiles(files) {
+    if (busy) return;
     try {
       const person = Number($('#ref-person').value), kind = $('#ref-kind').value;
       for (const file of files) {
@@ -141,6 +143,7 @@ export async function setupAI({ poseImage, characters, toast }) {
         if (file.size > 20 * 1024 * 1024) throw new Error('单张参考图不能超过 20 MB。');
         const url = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); });
         references.push({ id: crypto.randomUUID(), url, person, kind });
+        if (kind === 'scene') $('#ai-use-scene').checked = true;
       }
     } catch (err) { status(err.message); }
     renderReferences(); saveScene();
@@ -183,7 +186,7 @@ export async function setupAI({ poseImage, characters, toast }) {
     const clothingConstraint = clothing.length ? `【服饰约束】${clothing.map(reference => `人偶 ${reference.person}`).join('、')}必须穿着对应服饰参考图中的衣服，忠实匹配款式、颜色、材质、长度、领型和细节。服饰参考优先于旧提示词中冲突的衣着描述，不得替换为默认日常服装或人脸照片里的衣服；保持当前姿态，衣物自然随姿态变形。` : '';
     if (!$('#ai-use-pose').checked) return references.length ? clothingConstraint + '参考图中的人脸仅用于对应人物身份，忠实保留脸型、五官、肤色，不混合不同人物面孔；服饰参考只用于对应人物衣着。人物编号仅用于参考图绑定，不在最终图像中显示。' : '';
     for (const reference of references) if (reference.kind !== 'scene' && !people.some(p => p.id === reference.person)) throw new Error(`参考图对应的人偶 ${reference.person} 已被移除，请删除该参考图。`);
-    return `${clothingConstraint}\n【当前姿态强制约束】图片 1 是本次生图的唯一姿态与构图依据，优先于后续参考照片和提示词中冲突的动作描述。逐一匹配各人物的头部朝向、躯干倾斜、髋部位置、手臂与手掌位置、腿部弯曲和双脚位置；坐姿必须保持坐姿，不得改为站姿。后续人脸和服饰照片只提取身份或衣着，禁止复制它们的身体动作、站姿、相机视角或构图。画面中必须有 ${people.length} 个人物。人物资料：${JSON.stringify(people)}（height 单位为厘米，weight 单位为公斤）。人偶形态参考图仅用于各人物的姿态、体型比例、相对位置和相机视角，不复制人偶的裸露表面、塑料材质或关节结构。服装以用户提示词和对应服饰参考为准；用户未指定衣着时，人物默认穿着完整日常服装（上衣、长裤和鞋），身体由衣物自然遮盖，不生成裸体或内衣造型。最终人物的真实感或风格以用户提示词为准。人偶编号以形态参考图头部蓝色数字标签为准，最终图像不保留数字标签。人脸参考用于对应人物身份，忠实保留脸型、眼睛、鼻子、嘴唇、肤色和独特五官，不混合不同人物的面孔。服饰参考仅用于对应人物的衣着。`;
+    return `${clothingConstraint}\n【当前姿态强制约束】图片 1 是本次生图的人物姿态与相对位置依据，背景、环境和照明由场景参考与场景提示词决定，优先于后续参考照片和提示词中冲突的动作描述。逐一匹配各人物的头部朝向、躯干倾斜、髋部位置、手臂与手掌位置、腿部弯曲和双脚位置；坐姿必须保持坐姿，不得改为站姿。后续人脸和服饰照片只提取身份或衣着，禁止复制它们的身体动作、站姿、相机视角或构图。画面中必须有 ${people.length} 个人物。人物资料：${JSON.stringify(people)}（height 单位为厘米，weight 单位为公斤）。人偶形态参考图仅用于各人物的姿态、体型比例、相对位置和相机视角，不复制人偶的裸露表面、塑料材质或关节结构。服装以用户提示词和对应服饰参考为准；用户未指定衣着时，人物默认穿着完整日常服装（上衣、长裤和鞋），身体由衣物自然遮盖，不生成裸体或内衣造型。最终人物的真实感或风格以用户提示词为准。人偶编号以形态参考图头部蓝色数字标签为准，最终图像不保留数字标签。人脸参考用于对应人物身份，忠实保留脸型、眼睛、鼻子、嘴唇、肤色和独特五官，不混合不同人物的面孔。服饰参考仅用于对应人物的衣着。`;
   }
   const sceneStorageKey = 'bodyfactory.scene-lighting';
   let sceneState = { enabled: false, source: '', lighting: '', prompt: '' };
@@ -209,12 +212,12 @@ export async function setupAI({ poseImage, characters, toast }) {
     markdown($('#scene-prompt-preview'), sceneState.prompt);
   }
   saveScene();
-  $('#ai-use-scene').onchange = saveScene;
+  $('#ai-use-scene').onchange = () => { saveScene(); renderReferences(); };
   $('#ai-scene-prompt').oninput = saveScene;
   for (const id of ['#ai-scene-source', '#ai-lighting-source']) $(id).oninput = () => { $('#ai-scene-prompt').value = ''; saveScene(); };
   function scenePrompt() {
-    const text = $('#ai-scene-prompt').value.trim() || [$('#ai-scene-source').value.trim(), $('#ai-lighting-source').value.trim()].filter(Boolean).join('\n');
-    return [characterPrompt(), (references.some(r => r.kind === 'clothing') || $('#ai-clothing-prompt').value !== autoPrompts.clothingPrompt?.value) && $('#ai-clothing-prompt').value.trim() ? `服饰提示词：${$('#ai-clothing-prompt').value.trim()}` : '', $('#ai-use-pose').checked && $('#ai-pose-prompt').value.trim() ? `形态提示词：${$('#ai-pose-prompt').value.trim()}` : '', $('#ai-use-scene').checked && text ? `【场景与照明】${text}\n仅用于环境、背景和照明。保持当前人物人数、人脸、服饰及姿态约束，光线作用于人物和环境时应一致。` : ''].filter(Boolean).join('\n');
+    const text = [$('#ai-scene-source').value.trim() && `场景要求：${$('#ai-scene-source').value.trim()}`, $('#ai-lighting-source').value.trim() && `照明要求：${$('#ai-lighting-source').value.trim()}`, $('#ai-scene-prompt').value.trim()].filter(Boolean).join('\n');
+    return [characterPrompt(), (references.some(r => r.kind === 'clothing') || $('#ai-clothing-prompt').value !== autoPrompts.clothingPrompt?.value) && $('#ai-clothing-prompt').value.trim() ? `服饰提示词：${$('#ai-clothing-prompt').value.trim()}` : '', $('#ai-use-pose').checked && $('#ai-pose-prompt').value.trim() ? `形态提示词：${$('#ai-pose-prompt').value.trim()}` : '', $('#ai-use-scene').checked && text ? `【场景与照明】${text}\n场景参考与当前场景要求优先于原始或旧最终提示词中冲突的背景描述；必须将人物置于指定环境中，不能以人偶截图、人脸或服饰照片的白底替代场景。人偶截图只提供人物姿态，不提供背景或灯光。仅用于环境、背景和照明。保持当前人物人数、人脸、服饰及姿态约束，光线作用于人物和环境时应一致。` : ''].filter(Boolean).join('\n');
   }
   $('#btn-scene-prompt').onclick = async () => {
     if (busy) return;
@@ -235,15 +238,28 @@ export async function setupAI({ poseImage, characters, toast }) {
   };
   function inputReferences() {
     const images = [], labels = [];
-    if ($('#ai-use-pose').checked) { images.push(poseImage()); labels.push('图片 1：当前人偶姿态图，唯一姿态依据，必须严格匹配，禁止其他照片覆盖该姿态。不参考裸露外观或材质，服装另按文字和服饰参考生成。'); }
+    if ($('#ai-use-pose').checked) { images.push(poseImage()); labels.push('图片 1：当前人偶姿态图，唯一姿态依据，必须严格匹配；忽略截图背景、地面网格和照明，禁止其他照片覆盖该姿态。不参考裸露外观或材质，服装另按文字和服饰参考生成。'); }
     for (const reference of references) {
       if (reference.kind === 'scene') {
-        if ($('#ai-use-scene').checked) { images.push(reference.url); labels.push(`图片 ${images.length}：场景与照明参考，仅参考环境布局、背景与灯光，不复制图中人物、人脸、服饰或身体姿态。`); }
+        if ($('#ai-use-scene').checked) { images.push(reference.url); labels.push(`图片 ${images.length}：场景与照明参考，必须应用该环境布局、背景材质与灯光，将人物融入此场景，优先于其他图片的背景，不复制图中人物、人脸、服饰或身体姿态。`); }
         continue;
       }
       images.push(reference.url); labels.push(`图片 ${images.length}：人偶 ${reference.person} 的${reference.kind === 'face' ? '人脸身份' : '服饰'}参考，仅用于${reference.kind === 'face' ? '面部身份' : '衣服样式'}，忽略该照片的身体姿态与构图。`);
     }
     return { images, labels: labels.join('\n') };
+  }
+  function checkGenerationReferences(model, images) {
+    const people = characters();
+    for (const reference of references) {
+      if (!['face', 'clothing', 'scene'].includes(reference.kind) || !reference.url) throw new Error('参考图类型或内容无效，请重新添加。');
+      if (reference.kind !== 'scene' && !people.some(person => person.id === reference.person)) throw new Error(`参考图对应的人偶 ${reference.person} 已被移除，请重新绑定或删除该参考图。`);
+    }
+    if (!model || model.kind !== 'image') throw new Error('请选择可用的生图模型。');
+    if (images.length && !model.references) throw new Error('所选生图模型不支持参考图，请更换模型。');
+    if (images.length > model.maxReferences) throw new Error(`所选模型最多接收 ${model.maxReferences} 张参考图，当前 ${images.length} 张；请更换模型或减少参考图。`);
+    const counts = kind => references.filter(reference => reference.kind === kind).length;
+    const scene = counts('scene');
+    $('#ai-reference-check').textContent = `本次参考检查：人脸 ${counts('face')} 张；服饰 ${counts('clothing')} 张；形态${$('#ai-use-pose').checked ? '已启用（本次姿态）' : '已关闭'}；场景${$('#ai-use-scene').checked ? `已启用（${scene} 张图及场景、照明文字）` : `已关闭（${scene} 张场景图不发送）`}。涂鸦通过“涂鸦修图”使用。`;
   }
   async function remember(images, prompt, model, parentId = null) {
     for (const url of images) {
@@ -279,20 +295,22 @@ export async function setupAI({ poseImage, characters, toast }) {
     ];
     for (const key of active) if (autoPrompts[key]?.signature !== signature && $(autoFields[key]).value === autoPrompts[key]?.value) { $(autoFields[key]).value = ''; autoPrompts[key].savedValue = ''; }
     const missing = active.filter(key => !$(autoFields[key]).value.trim());
-    if (!missing.length) return;
+    const reviewNeeded = images.length && autoPrompts.referenceReview?.signature !== signature;
+    if (!missing.length && !reviewNeeded) return;
     if (!images.length && !$('#ai-final-prompt').value.trim() && ![...allowed].some(key => $(autoFields[key]).value.trim())) throw new Error('请填写提示词或添加已启用的参考图。');
     const model = models.find(m => m.id === $('#ai-optimizer').value && m.kind === 'text');
     if (!model || (images.length && !model.references)) throw new Error('自动补全需要支持图像输入的文字模型；请切换模型或手动填写空白提示词。');
     status('正在分析参考图，补全空白提示词…');
     const existing = Object.fromEntries(Object.entries(autoFields).filter(([key]) => allowed.has(key)).map(([key, id]) => [key, $(id).value]));
-    const result = await request({ model, purpose: 'text', images, prompt: `生图前自动补全。只输出 JSON 对象，键为 ${missing.join('、')}，每个值为非空的中文提示词。只补全这些空字段，不覆盖已有内容。图片用途：${labels}。当前人物资料：${JSON.stringify($('#ai-use-pose').checked ? characters() : [])}。已有内容：${JSON.stringify(existing)}。最终提示词：${$('#ai-final-prompt').value}。originalPrompt 概括用户需求；clothingPrompt 按对应服饰图描述衣服的颜色、款式、材质和细节，注明人物编号，不复制衣服照片的姿态；posePrompt 按当前人偶描述身体朝向、躯干、手臂、腿和脚的位置及体型，不复制人脸或场景照片中的动作；sceneSource 描述场景图的空间布局与背景；lightingSource 描述图中光源方向、色温、柔硬程度、补光和阴影；scenePrompt 综合场景与照明。没有场景图时，仅按已有需求给出简洁适合的背景及一致照明，不编造特定地点、无关物件或新人物。人脸图只用于身份，不从中复制服装或背景。` }, null, document.createElement('div'));
+    const result = await request({ model, purpose: 'text', images, prompt: `生图前自动补全。只输出 JSON 对象，键为 ${[...missing, ...(reviewNeeded ? ['referenceReview'] : [])].join('、')}，每个值为非空的中文提示词。只补全这些空字段，不覆盖已有内容。referenceReview 必须逐一核对所有输入图片及当前文字要求，汇总对应人物的人脸身份、服饰、姿态与体型、场景空间布局、灯光和阴影，明确每类参考的用途及冲突处理：人偶只决定姿态与体型，服饰图只决定衣着，人脸图只决定身份，场景图决定背景与照明；忽略其他图片的背景，不遗漏任何已启用参考。没有图片的类别不虚构。场景开启时，将人物自然放入场景，禁止复制人偶的白底。图片用途：${labels}。当前人物资料：${JSON.stringify($('#ai-use-pose').checked ? characters() : [])}。已有内容：${JSON.stringify(existing)}。最终提示词：${$('#ai-final-prompt').value}。originalPrompt 概括用户需求；clothingPrompt 按对应服饰图描述衣服的颜色、款式、材质和细节，注明人物编号，不复制衣服照片的姿态；posePrompt 按当前人偶描述身体朝向、躯干、手臂、腿和脚的位置及体型，不复制人脸或场景照片中的动作；sceneSource 描述场景图的空间布局与背景；lightingSource 描述图中光源方向、色温、柔硬程度、补光和阴影；scenePrompt 综合场景与照明。没有场景图时，仅按已有需求给出简洁适合的背景及一致照明，不编造特定地点、无关物件或新人物。人脸图只用于身份，不从中复制服装或背景。` }, null, document.createElement('div'));
     let values;
     try { values = JSON.parse(result.text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')); }
     catch { throw new Error('AI 自动补全未返回有效结果，请重试或手动填写空白提示词。'); }
-    if (!values || missing.some(key => typeof values[key] !== 'string' || !values[key].trim())) throw new Error('AI 未补全所有空白提示词，请重试或手动填写。');
+    if (!values || (reviewNeeded && (typeof values.referenceReview !== 'string' || !values.referenceReview.trim())) || missing.some(key => typeof values[key] !== 'string' || !values[key].trim())) throw new Error('AI 未补全所有空白提示词，请重试或手动填写。');
     for (const key of missing) {
       const value = values[key].trim(); $(autoFields[key]).value = value; autoPrompts[key] = { value, savedValue: value, signature };
     }
+    if (reviewNeeded) autoPrompts.referenceReview = { value: values.referenceReview.trim(), signature };
     localStorage.setItem(autoPromptKey, JSON.stringify(autoPrompts));
     saveScene();
   }
@@ -302,10 +320,11 @@ export async function setupAI({ poseImage, characters, toast }) {
     try {
       const model = models.find(m => m.id === $('#ai-model').value);
       const { images, labels } = inputReferences();
+      checkGenerationReferences(model, images);
       await completeReferencePrompts(images, labels);
       const text = ($('#ai-final-prompt').value || $('#ai-prompt').value).trim(); if (!text) throw new Error('请填写提示词。');
       status('提示词已就绪，正在生成图像…');
-      const prompt = `${text}\n${scenePrompt()}\n${labels}`;
+      const prompt = `${text}\n${scenePrompt()}\n${images.length ? `【本次参考综合检查】${autoPrompts.referenceReview.value}` : ''}\n${labels}`;
       const result = await request({ model, prompt, images, size: imageSize(), purpose: 'image' });
       await remember(result.images, prompt, model); status('已生成并保存到本地历史。');
     } catch (err) { status(err.message); }
