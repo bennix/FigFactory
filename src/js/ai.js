@@ -94,7 +94,7 @@ export async function setupAI({ poseImage, characters, toast }) {
     $('#studio-progress').hidden = !value;
     $('#btn-generate').textContent = value ? '处理中…' : '生成图像';
     ['#btn-generate', '#btn-optimize', '#btn-pipeline', '#btn-edit-image', '#btn-plan-layers', '#btn-discuss-layers', '#btn-split-layers', '#btn-scene-prompt'].forEach(id => { $(id).disabled = value; });
-    ['#ai-use-scene', '#ai-scene-source', '#ai-lighting-source', '#ai-scene-prompt'].forEach(id => { $(id).disabled = value; });
+    ['#ai-use-scene', '#ai-scene-source', '#ai-lighting-source', '#ai-scene-prompt', '#ai-clothing-prompt', '#ai-pose-prompt'].forEach(id => { $(id).disabled = value; });
     ['#studio-copy', '#studio-save', '#studio-edit', '#studio-layers'].forEach(id => { $(id).disabled = value || !currentImage; });
   }
   function fillModelSelect(id, list) {
@@ -214,7 +214,7 @@ export async function setupAI({ poseImage, characters, toast }) {
   for (const id of ['#ai-scene-source', '#ai-lighting-source']) $(id).oninput = () => { $('#ai-scene-prompt').value = ''; saveScene(); };
   function scenePrompt() {
     const text = $('#ai-scene-prompt').value.trim() || [$('#ai-scene-source').value.trim(), $('#ai-lighting-source').value.trim()].filter(Boolean).join('\n');
-    return [characterPrompt(), $('#ai-use-scene').checked && text ? `【场景与照明】${text}\n仅用于环境、背景和照明。保持当前人物人数、人脸、服饰及姿态约束，光线作用于人物和环境时应一致。` : ''].filter(Boolean).join('\n');
+    return [characterPrompt(), (references.some(r => r.kind === 'clothing') || $('#ai-clothing-prompt').value !== autoPrompts.clothingPrompt?.value) && $('#ai-clothing-prompt').value.trim() ? `服饰提示词：${$('#ai-clothing-prompt').value.trim()}` : '', $('#ai-use-pose').checked && $('#ai-pose-prompt').value.trim() ? `形态提示词：${$('#ai-pose-prompt').value.trim()}` : '', $('#ai-use-scene').checked && text ? `【场景与照明】${text}\n仅用于环境、背景和照明。保持当前人物人数、人脸、服饰及姿态约束，光线作用于人物和环境时应一致。` : ''].filter(Boolean).join('\n');
   }
   $('#btn-scene-prompt').onclick = async () => {
     if (busy) return;
@@ -256,13 +256,55 @@ export async function setupAI({ poseImage, characters, toast }) {
     await refreshGallery();
     if (parentId) await showImage(currentImage);
   }
+  const autoPromptKey = 'bodyfactory.auto-reference-prompts';
+  let autoPrompts = {};
+  try { autoPrompts = JSON.parse(localStorage.getItem(autoPromptKey)) || {}; } catch { /* No automatic descriptions yet. */ }
+  const autoFields = { originalPrompt: '#ai-prompt', clothingPrompt: '#ai-clothing-prompt', posePrompt: '#ai-pose-prompt', sceneSource: '#ai-scene-source', lightingSource: '#ai-lighting-source', scenePrompt: '#ai-scene-prompt' };
+  for (const key of ['clothingPrompt', 'posePrompt']) {
+    const saved = autoPrompts[key]?.savedValue ?? autoPrompts[key]?.value;
+    if (typeof saved === 'string') $(autoFields[key]).value = saved;
+    $(autoFields[key]).oninput = () => { autoPrompts[key] = { ...autoPrompts[key], savedValue: $(autoFields[key]).value }; localStorage.setItem(autoPromptKey, JSON.stringify(autoPrompts)); };
+  }
+  async function completeReferencePrompts(images, labels) {
+    const allowed = new Set(['originalPrompt', ...(references.some(r => r.kind === 'clothing') || $('#ai-clothing-prompt').value.trim() && $('#ai-clothing-prompt').value !== autoPrompts.clothingPrompt?.value ? ['clothingPrompt'] : []), ...($('#ai-use-pose').checked ? ['posePrompt'] : []), ...($('#ai-use-scene').checked ? ['sceneSource', 'lightingSource', 'scenePrompt'] : [])]);
+    const manual = Object.fromEntries(Object.entries(autoFields).filter(([key]) => allowed.has(key)).map(([key, id]) => [key, $(id).value === autoPrompts[key]?.value ? '' : $(id).value]));
+    const context = JSON.stringify({ images, labels, people: $('#ai-use-pose').checked ? characters() : [], manual, final: $('#ai-final-prompt').value, pose: $('#ai-use-pose').checked, scene: $('#ai-use-scene').checked });
+    const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(context));
+    const signature = [...new Uint8Array(hash)].map(n => n.toString(16).padStart(2, '0')).join('');
+    const active = [
+      ...(!$('#ai-final-prompt').value.trim() && (!$('#ai-prompt').value.trim() || $('#ai-prompt').value === autoPrompts.originalPrompt?.value) ? ['originalPrompt'] : []),
+      ...(references.some(r => r.kind === 'clothing') ? ['clothingPrompt'] : []),
+      ...($('#ai-use-pose').checked ? ['posePrompt'] : []),
+      ...($('#ai-use-scene').checked ? ['sceneSource', 'lightingSource', 'scenePrompt'] : []),
+    ];
+    for (const key of active) if (autoPrompts[key]?.signature !== signature && $(autoFields[key]).value === autoPrompts[key]?.value) { $(autoFields[key]).value = ''; autoPrompts[key].savedValue = ''; }
+    const missing = active.filter(key => !$(autoFields[key]).value.trim());
+    if (!missing.length) return;
+    if (!images.length && !$('#ai-final-prompt').value.trim() && ![...allowed].some(key => $(autoFields[key]).value.trim())) throw new Error('请填写提示词或添加已启用的参考图。');
+    const model = models.find(m => m.id === $('#ai-optimizer').value && m.kind === 'text');
+    if (!model || (images.length && !model.references)) throw new Error('自动补全需要支持图像输入的文字模型；请切换模型或手动填写空白提示词。');
+    status('正在分析参考图，补全空白提示词…');
+    const existing = Object.fromEntries(Object.entries(autoFields).filter(([key]) => allowed.has(key)).map(([key, id]) => [key, $(id).value]));
+    const result = await request({ model, purpose: 'text', images, prompt: `生图前自动补全。只输出 JSON 对象，键为 ${missing.join('、')}，每个值为非空的中文提示词。只补全这些空字段，不覆盖已有内容。图片用途：${labels}。当前人物资料：${JSON.stringify($('#ai-use-pose').checked ? characters() : [])}。已有内容：${JSON.stringify(existing)}。最终提示词：${$('#ai-final-prompt').value}。originalPrompt 概括用户需求；clothingPrompt 按对应服饰图描述衣服的颜色、款式、材质和细节，注明人物编号，不复制衣服照片的姿态；posePrompt 按当前人偶描述身体朝向、躯干、手臂、腿和脚的位置及体型，不复制人脸或场景照片中的动作；sceneSource 描述场景图的空间布局与背景；lightingSource 描述图中光源方向、色温、柔硬程度、补光和阴影；scenePrompt 综合场景与照明。没有场景图时，仅按已有需求给出简洁适合的背景及一致照明，不编造特定地点、无关物件或新人物。人脸图只用于身份，不从中复制服装或背景。` }, null, document.createElement('div'));
+    let values;
+    try { values = JSON.parse(result.text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')); }
+    catch { throw new Error('AI 自动补全未返回有效结果，请重试或手动填写空白提示词。'); }
+    if (!values || missing.some(key => typeof values[key] !== 'string' || !values[key].trim())) throw new Error('AI 未补全所有空白提示词，请重试或手动填写。');
+    for (const key of missing) {
+      const value = values[key].trim(); $(autoFields[key]).value = value; autoPrompts[key] = { value, savedValue: value, signature };
+    }
+    localStorage.setItem(autoPromptKey, JSON.stringify(autoPrompts));
+    saveScene();
+  }
   $('#btn-generate').onclick = async () => {
     if (busy) return;
     setBusy(true); status('正在生成，请稍候…');
     try {
       const model = models.find(m => m.id === $('#ai-model').value);
-      const text = ($('#ai-final-prompt').value || $('#ai-prompt').value).trim(); if (!text) throw new Error('请填写提示词。');
       const { images, labels } = inputReferences();
+      await completeReferencePrompts(images, labels);
+      const text = ($('#ai-final-prompt').value || $('#ai-prompt').value).trim(); if (!text) throw new Error('请填写提示词。');
+      status('提示词已就绪，正在生成图像…');
       const prompt = `${text}\n${scenePrompt()}\n${labels}`;
       const result = await request({ model, prompt, images, size: imageSize(), purpose: 'image' });
       await remember(result.images, prompt, model); status('已生成并保存到本地历史。');
@@ -512,8 +554,20 @@ export async function setupAI({ poseImage, characters, toast }) {
     if (busy || !original) return;
     setBusy(true); status('正在根据涂鸦和修改说明修图…', true);
     try {
-      const model = models.find(m => m.id === $('#edit-model').value), instruction = $('#edit-prompt').value.trim();
-      if (!instruction) throw new Error('请填写修改说明。');
+      const model = models.find(m => m.id === $('#edit-model').value);
+      let instruction = $('#edit-prompt').value.trim();
+      if (!instruction && strokes.length) {
+        const reader = models.find(m => m.id === $('#ai-optimizer').value && m.kind === 'text' && m.references);
+        if (!reader) throw new Error('自动识别涂鸦需要支持图像输入的文字模型，也可以手动填写修改说明。');
+        status('正在对照原图识别涂鸦修改意图…', true);
+        const response = await request({ model: reader, purpose: 'text', images: [editCanvas.toDataURL('image/png'), currentImage.url], prompt: `涂鸦修图自动识别。图片 1 是带手工涂鸦的图，图片 2 是未涂鸦原图。只分析新增笔迹对应的区域、箭头、圈选和明确的修改意图，不把笔迹作为成品内容；未要求修改的区域和人物身份必须保持。涂鸦共 ${strokes.length} 笔，颜色：${[...new Set(strokes.map(s => s.color))].join('、')}。只输出 JSON：{"instruction":"可直接执行的中文修改说明","needsClarification":false}。若只有圈选、任意线条或无法明确判断修改目标，不猜测、不虚构修改，返回 needsClarification:true 并说明需要用户补充什么。` }, null, document.createElement('div'));
+        let parsed;
+        try { parsed = JSON.parse(response.text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')); }
+        catch { throw new Error('无法识别涂鸦意图，请手动填写修改说明。'); }
+        if (parsed?.needsClarification !== false || typeof parsed.instruction !== 'string' || !parsed.instruction.trim()) throw new Error('涂鸦意图不够明确，请补充修改说明后再次修图。');
+        instruction = parsed.instruction.trim(); $('#edit-prompt').value = instruction;
+      }
+      if (!instruction) throw new Error('请填写修改说明，或先绘制涂鸦。');
       const parentId = currentImage.id;
       const images = [editCanvas.toDataURL('image/png')];
       // Preserve an unmarked identity reference when the model accepts multiple images.

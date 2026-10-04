@@ -7,7 +7,10 @@ const assert = require('node:assert/strict');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'bodyfactory-test-'));
 app.setPath('userData', temp);
 let calls = [];
+let preflightCalls = [];
 let failNextImage = false;
+let unclearDoodle = false;
+let failAuto = false;
 dialog.showSaveDialog = async (window, options) => ({ canceled: false, filePath: path.join(temp, options.filters[0].extensions[0] === 'psd' ? 'output.psd' : 'output.png') });
 global.fetch = async (url, options) => {
   let body;
@@ -16,11 +19,13 @@ global.fetch = async (url, options) => {
     body = Object.fromEntries([...options.body.entries()].filter(([name]) => name !== 'image[]'));
     body.images = await Promise.all(options.body.getAll('image[]').map(async file => ({ image_url: `data:${file.type};base64,${Buffer.from(await file.arrayBuffer()).toString('base64')}` })));
   } else body = JSON.parse(options.body);
-  calls.push({ url, body, multipart: options.body instanceof FormData });
+  const preflight = body.messages?.[0]?.content?.[0]?.text?.includes('生图前自动补全');
+  const doodle = body.messages?.[0]?.content?.[0]?.text?.includes('涂鸦修图自动识别');
+  (preflight || doodle ? preflightCalls : calls).push({ url, body, multipart: options.body instanceof FormData });
   if (url.endsWith('/chat/completions')) {
     const planner = body.messages[0].content[0].text.includes('只输出 JSON');
     const scene = body.messages[0].content[0].text.includes('只生成场景与照明提示词');
-    const content = scene ? '## 场景\nSCENE_TEST 咖啡馆\n\n## 照明\n暖色侧光与柔和补光' : planner ? JSON.stringify({ layers: ['文字', '文字底板', '主体', '背景'].map(name => ({ name, description: `保留${name}，其他区域透明。` })) }) : '## 优化后的提示词\n\n保留**人物身份**与构图。<img src=x onerror=alert(1)>';
+    const content = preflight ? (failAuto ? '{}' : JSON.stringify({originalPrompt:'AUTO_MAIN',clothingPrompt:'AUTO_COAT',posePrompt:'AUTO_POSE',sceneSource:'AUTO_SCENE',lightingSource:'AUTO_LIGHT',scenePrompt:'AUTO_SCENE_PROMPT'})) : doodle ? JSON.stringify(unclearDoodle ? {instruction:'请补充圈选区域需要如何修改',needsClarification:true} : {instruction:'涂鸦要求：将袖口改成蓝色',needsClarification:false}) : scene ? '## 场景\nSCENE_TEST 咖啡馆\n\n## 照明\n暖色侧光与柔和补光' : planner ? JSON.stringify({ layers: ['文字', '文字底板', '主体', '背景'].map(name => ({ name, description: `保留${name}，其他区域透明。` })) }) : '## 优化后的提示词\n\n保留**人物身份**与构图。<img src=x onerror=alert(1)>';
     if (body.stream) return {
       ok: true, headers: { get: name => name === 'content-type' ? 'text/event-stream' : null },
       body: (async function* () {
@@ -55,6 +60,13 @@ app.whenReady().then(async () => {
   win.webContents.on('console-message', details => { if (details.level === 'error') errors.push(details.message); });
   const run = code => { if (process.env.BF_TEST_TRACE) console.log('Renderer:', code.slice(0, 100)); return Promise.race([win.webContents.executeJavaScript(code), sleep(15000).then(() => { throw new Error('Renderer timeout: ' + code.slice(0, 80)); })]); };
   const until = async expression => { for (let i = 0; i < 100; i++) { if (await run(expression)) return; await sleep(100); } throw new Error(`Timed out: ${expression}`); };
+  const drawStroke = async () => {
+    const point = await run(`(() => { const r = document.querySelector('#edit-canvas').getBoundingClientRect(); return {x:Math.round(r.left + r.width * .3),y:Math.round(r.top + r.height * .3)}; })()`);
+    win.webContents.sendInputEvent({type:'mouseDown',...point,button:'left',clickCount:1});
+    win.webContents.sendInputEvent({type:'mouseMove',x:point.x+20,y:point.y+20});
+    win.webContents.sendInputEvent({type:'mouseUp',x:point.x+20,y:point.y+20,button:'left',clickCount:1});
+    await sleep(100);
+  };
   try {
     if (win.webContents.isLoading()) await new Promise(resolve => win.webContents.once('did-finish-load', resolve));
     await until('!!window.__bf && document.querySelector("#ai-model").options.length === 6');
@@ -208,9 +220,52 @@ app.whenReady().then(async () => {
     assert.ok(!calls.at(-1).body.prompt.includes('SCENE_TEST'));
     assert.equal(calls.at(-1).body.images.length, 2);
     assert.equal(await run(`document.querySelector('#ai-final-prompt').value`), '');
+    await run(`document.querySelector('#ai-use-scene').checked = true; document.querySelector('#ai-use-scene').dispatchEvent(new Event('change')); document.querySelector('#ai-scene-source').value = 'MANUAL_ROOM'; document.querySelector('#ai-lighting-source').value = ''; document.querySelector('#ai-scene-prompt').value = ''; document.querySelector('#ai-clothing-prompt').value = ''; document.querySelector('#ai-pose-prompt').value = ''; document.querySelector('#btn-generate').click()`);
+    await until(`!document.querySelector('#btn-generate').disabled`);
+    assert.ok(await run(`document.querySelector('#ai-scene-source').value === 'MANUAL_ROOM' && document.querySelector('#ai-lighting-source').value === 'AUTO_LIGHT' && document.querySelector('#ai-scene-prompt').value === 'AUTO_SCENE_PROMPT' && document.querySelector('#ai-clothing-prompt').value === 'AUTO_COAT' && document.querySelector('#ai-pose-prompt').value === 'AUTO_POSE'`));
+    assert.equal(preflightCalls.at(-1).body.messages[0].content.filter(part => part.type === 'image_url').length, 3);
+    assert.ok(calls.at(-1).body.prompt.includes('AUTO_COAT') && calls.at(-1).body.prompt.includes('AUTO_POSE') && calls.at(-1).body.prompt.includes('AUTO_SCENE_PROMPT'));
+    const autoCount = preflightCalls.length;
+    await run(`document.querySelector('#btn-generate').click()`);
+    await until(`!document.querySelector('#btn-generate').disabled`);
+    assert.equal(preflightCalls.length, autoCount);
+    await run(`document.querySelector('#studio-edit').click()`);
+    await until(`document.querySelector('#image-dialog').open`);
+    await drawStroke();
+    await run(`document.querySelector('#edit-prompt').value = ''; document.querySelector('#btn-edit-image').click()`);
+    await until(`!document.querySelector('#btn-edit-image').disabled`);
+    assert.ok(calls.at(-1).body.prompt.includes('涂鸦要求：将袖口改成蓝色'));
+    assert.equal(preflightCalls.at(-1).body.messages[0].content.filter(part => part.type === 'image_url').length, 2);
+    unclearDoodle = true;
+    const imageCallCount = calls.length;
+    await drawStroke();
+    await run(`document.querySelector('#edit-prompt').value = ''; document.querySelector('#btn-edit-image').click()`);
+    await until(`!document.querySelector('#btn-edit-image').disabled`);
+    assert.equal(calls.length, imageCallCount);
+    assert.ok(await run(`document.querySelector('#edit-status').textContent.includes('不够明确')`));
+    assert.equal(await run(`document.querySelector('#edit-prompt').value`), '');
+    await run(`document.querySelector('#btn-edit-image').click()`);
+    await until(`!document.querySelector('#btn-edit-image').disabled`);
+    assert.equal(calls.length, imageCallCount);
+    await run(`document.querySelector('#image-dialog').close(); document.querySelector('#ai-use-scene').checked = false; document.querySelector('#ai-use-scene').dispatchEvent(new Event('change'))`);
     win.reload(); await sleep(500);
     await until('!!window.__bf && document.querySelector("#ai-model").options.length === 6');
-    assert.ok(await run(`!document.querySelector('#ai-use-scene').checked && document.querySelector('#ai-scene-prompt').value.includes('SCENE_TEST')`));
+    assert.ok(await run(`!document.querySelector('#ai-use-scene').checked && document.querySelector('#ai-scene-prompt').value.includes('AUTO_SCENE_PROMPT')`));
+    await run(`document.querySelector('#ai-prompt').value = ''; document.querySelector('#ai-final-prompt').value = ''; document.querySelector('#btn-generate').click()`);
+    await until(`!document.querySelector('#btn-generate').disabled`);
+    assert.equal(await run(`document.querySelector('#ai-prompt').value`), 'AUTO_MAIN');
+    assert.ok(calls.at(-1).body.prompt.startsWith('AUTO_MAIN'));
+    failAuto = true;
+    const beforeIncomplete = calls.length;
+    await run(`document.querySelector('#ai-pose-prompt').value = ''; document.querySelector('#btn-generate').click()`);
+    await until(`!document.querySelector('#btn-generate').disabled`);
+    assert.equal(calls.length, beforeIncomplete);
+    assert.ok(await run(`document.querySelector('#ai-status').textContent.includes('未补全')`));
+    const beforeDisabled = preflightCalls.length;
+    await run(`document.querySelector('#ai-use-pose').checked = false; document.querySelector('#ai-use-pose').dispatchEvent(new Event('change')); document.querySelector('#ai-use-scene').checked = false; document.querySelector('#ai-use-scene').dispatchEvent(new Event('change')); document.querySelector('#ai-prompt').value = '只做人像'; document.querySelector('#ai-clothing-prompt').value = 'MANUAL_COAT'; document.querySelector('#btn-generate').click()`);
+    await until(`!document.querySelector('#btn-generate').disabled`);
+    assert.equal(preflightCalls.length, beforeDisabled);
+    assert.ok(calls.at(-1).body.prompt.includes('MANUAL_COAT') && !calls.at(-1).body.prompt.includes('AUTO_POSE') && !calls.at(-1).body.prompt.includes('AUTO_SCENE_PROMPT'));
     assert.deepEqual(errors, []);
     console.log('PASS: visible AI input/output, optional pose editor, inline results/history, figures, independent gender/shape, undo/redo, encrypted settings, image generation, zoom/copy, doodle editing, optimization pipeline, reload persistence and batch history deletion, layer planning, RGBA splitting, PSD export persistent light theme, sanitized 500 diagnostics, explicit retry recovery and separate text/image Key validation and incremental SSE rendering.');
   } catch (error) { console.error(error); console.error('UI diagnostics:', await run(`JSON.stringify({status:document.querySelector('#ai-status').textContent, gallery:document.querySelectorAll('.studio-history-card').length, calls:document.querySelector('#studio-history-count').textContent})`)); process.exitCode = 1; }

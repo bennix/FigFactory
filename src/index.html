@@ -203,10 +203,12 @@
         <button class="ghost wide" id="btn-ref">＋ 添加参考图 / 粘贴图片</button>
         <input type="file" id="ref-file" accept="image/png,image/jpeg,image/webp" multiple hidden />
         <div id="ref-thumbs" class="ref-thumbs"></div><p class="ai-note">缩略图下可修改参考类型；场景图由“场景与照明”开关控制，不绑定人偶。</p>
+        <label class="ai-field">服饰提示词<textarea id="ai-clothing-prompt" rows="3" placeholder="有服饰参考时，生图前由 AI 补全空白内容；也可手动填写…"></textarea></label>
         <div id="studio-pose-reference">
           <div class="pose-ref-heading"><label class="switch"><input type="checkbox" id="ai-use-pose" /><span></span>形态参考</label><button class="link" id="btn-pose-editor">编辑人偶 ↗</button></div>
           <div class="pose-ref-content"><img id="studio-pose-preview" alt="可选的人物形态参考" /><div><strong id="studio-pose-count">1 个人偶</strong><p>仅参考姿态、体型与构图。<br/>未指定服装时默认日常穿着。</p></div></div>
         </div>
+        <label class="ai-field">形态提示词<textarea id="ai-pose-prompt" rows="3" placeholder="开启形态参考后，生图前自动描述当前姿态与体型…"></textarea></label>
         <section id="scene-settings">
           <label class="switch"><input type="checkbox" id="ai-use-scene" /><span></span>场景与照明</label>
           <label class="ai-field">场景描述<textarea id="ai-scene-source" rows="3" placeholder="例如：傍晚的街边咖啡馆，落地窗旁，背景简洁…"></textarea></label>
@@ -218,6 +220,7 @@
         </section>
         <label class="ai-field">出图比例<select id="studio-size"><option value="1024x1024">方形 · 1:1</option><option value="1024x1536">竖图 · 2:3</option><option value="1536x1024">横图 · 3:2</option></select></label>
         <p class="ai-note">人脸参考优先保留五官、脸型和身份特征；实际保真度取决于模型。</p>
+        <p class="ai-note">生图前自动检查已启用的参考，补全空的场景、照明、服饰和形态提示词；保留手动内容。</p>
         <button class="primary wide" id="btn-generate">生成图像</button>
         <p id="ai-status" class="ai-note" role="status"></p>
       </section>
@@ -280,7 +283,7 @@
     <div class="row2"><button class="ghost" id="image-zoom-out">−</button><span id="image-zoom">100%</span><button class="ghost" id="image-zoom-in">＋</button><button class="ghost" id="image-fit">适应画面</button><label><input type="checkbox" id="image-pan" /> 平移模式</label><button class="ghost" id="image-copy">复制图片</button></div>
     <div class="edit-canvas-wrap"><canvas id="edit-canvas"></canvas></div>
     <label class="ai-field">修图模型<select id="edit-model"></select></label>
-    <label class="ai-field">修改说明<textarea id="edit-prompt" rows="3" placeholder="例如：将红色涂鸦区域的外套改为蓝色；保留人物面部和其他部分。"></textarea></label>
+    <label class="ai-field">修改说明<textarea id="edit-prompt" rows="3" placeholder="可手写修改说明；有涂鸦而此处为空时，AI 会先对照原图识别意图。"></textarea></label>
     <details id="layer-section">
       <summary>AI 拆层 · 导出 PSD</summary>
       <p class="ai-note">拆层方案从上到下排列。文字、文字底板、主体、背景分开；色块、卡片、横幅独立成层。PSD 中的文字为像素层。</p>
