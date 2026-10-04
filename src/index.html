@@ -30,7 +30,7 @@
       <div class="studio-top-actions"><span class="studio-local">● 本地工作空间</span><div id="studio-settings"></div></div>
     </header>
     <aside id="studio-input" class="studio-pane">
-      <div class="workspace-title"><span class="eyebrow">01 / CREATE</span><h1>AI 输入</h1><p>描述画面，添加参考，开始创作。</p></div><pre id="ai-stream-output" class="ai-stream-output" hidden aria-live="polite"></pre><div id="studio-input-footer"><details id="ai-error-details" hidden><summary>请求详情</summary><pre id="ai-error-diagnostics"></pre></details></div>
+      <div class="workspace-title"><span class="eyebrow">01 / CREATE</span><h1>AI 输入</h1><p>描述画面，添加参考，开始创作。</p></div><div id="ai-stream-output" class="ai-stream-output markdown-output" hidden aria-live="polite"></div><div id="studio-input-footer"><details id="ai-error-details" hidden><summary>请求详情</summary><pre id="ai-error-diagnostics"></pre></details></div>
     </aside>
     <main id="studio-results">
       <header class="result-heading"><div><span class="eyebrow">02 / CANVAS</span><h2>AI 出图</h2></div><span id="studio-image-meta">等待生成</span></header>
@@ -188,9 +188,14 @@
         <header><h2>生图设置</h2><button class="link" id="btn-history">历史管理</button></header>
         <label class="ai-field">生图模型<select id="ai-model"></select></label>
         <p class="ai-note" id="ai-model-note"></p>
-        <label class="ai-field">提示词<textarea id="ai-prompt" rows="4" placeholder="描述人物、服装、场景与画风…"></textarea></label>
+        <label class="ai-field">原始提示词<textarea id="ai-prompt" rows="4" placeholder="描述人物、服装、场景与画风…"></textarea></label>
         <label class="ai-field">提示词优化<select id="ai-optimizer"></select></label>
         <div class="row2"><button class="ghost small" id="btn-optimize">优化提示词</button><button class="ghost small" id="btn-pipeline">三模型协作优化</button></div>
+        <details id="prompt-process" hidden><summary>提示词优化过程</summary><div id="prompt-runs"></div></details>
+        <section id="final-prompt-section" hidden>
+          <label class="ai-field">最终提示词<textarea id="ai-final-prompt" rows="5" placeholder="优化后的最终提示词，可继续编辑…"></textarea></label>
+          <div id="final-prompt-preview" class="markdown-output" aria-label="最终提示词 Markdown 预览"></div>
+        </section>
         <div class="form-grid"><label>参考类型<select id="ref-kind"><option value="face">人脸</option><option value="clothing">服饰</option></select></label><label>对应人偶<select id="ref-person"></select></label></div>
         <button class="ghost wide" id="btn-ref">＋ 添加参考图 / 粘贴图片</button>
         <input type="file" id="ref-file" accept="image/png,image/jpeg,image/webp" multiple hidden />
@@ -272,7 +277,7 @@
       <label class="ai-field">拆层说明 · 每行一层，从上往下<textarea id="layer-plan" rows="6"></textarea></label>
       <label class="ai-field">拆层模型<select id="layer-model"></select></label>
       <button class="primary" id="btn-split-layers">按方案拆成透明图层</button>
-      <pre id="layer-stream-output" class="ai-stream-output" hidden aria-live="polite"></pre><p class="ai-note" id="layer-status" role="status"></p>
+      <div id="layer-stream-output" class="ai-stream-output markdown-output" hidden aria-live="polite"></div><p class="ai-note" id="layer-status" role="status"></p>
       <div id="layer-results"></div>
       <button class="primary" id="btn-export-psd" disabled>另存为分层 PSD</button>
     </details>

@@ -486,3 +486,16 @@ body > .toast { position: fixed; z-index: 100; }
 #studio-feedback { white-space: pre-wrap; }
 
 .ai-stream-output { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; padding: 12px; background: var(--bg-1); border: 1px solid var(--line-2); border-radius: 10px; font: inherit; font-size: 12px; user-select: text; }
+
+#prompt-process { margin: 12px 0; border: 1px solid var(--line-2); border-radius: 10px; padding: 12px; }
+#prompt-runs > details { margin-top: 12px; }
+#prompt-runs h4 { overflow-wrap: anywhere; font-size: 12px; margin: 16px 0 8px; }
+.markdown-output { font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; user-select: text; }
+.prompt-stage { max-height: 320px; overflow: auto; }
+.markdown-output p { margin: 8px 0; }
+.markdown-output pre { overflow: auto; padding: 10px; background: var(--bg-1); }
+.markdown-output code { font-size: 12px; }
+.markdown-output table { border-collapse: collapse; display: block; overflow: auto; }
+.markdown-output th, .markdown-output td { border: 1px solid var(--line-2); padding: 6px; }
+.markdown-output blockquote { border-left: 3px solid var(--line-2); margin-left: 0; padding-left: 12px; }
+#final-prompt-preview { max-height: 240px; overflow: auto; padding: 12px; border: 1px solid var(--line-2); border-radius: 10px; }

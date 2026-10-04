@@ -1,3 +1,5 @@
+import { marked } from '../vendor/markdown/marked.esm.js';
+import DOMPurify from '../vendor/markdown/purify.es.mjs';
 const $ = s => document.querySelector(s);
 const DEFAULT_MODELS = [
   { id: 'inclusionai/ming-image-0.1-design', kind: 'image', protocol: 'openai-images', references: false, maxReferences: 0, note: '官方目录标记为仅文字输入，不能保留参考人脸。' },
@@ -43,6 +45,41 @@ export async function setupAI({ poseImage, characters, toast }) {
   let zoom = 1, offsetX = 0, offsetY = 0, panStart = null;
   const editCanvas = $('#edit-canvas'), context = editCanvas.getContext('2d');
   let selectedHistory = new Set(), layerImages = [], savedModels = structuredClone(models);
+  const promptStorageKey = 'bodyfactory.prompt-optimization';
+  let promptState = { runs: [], final: '' };
+  try {
+    const saved = JSON.parse(localStorage.getItem(promptStorageKey));
+    if (saved && Array.isArray(saved.runs) && typeof saved.final === 'string') promptState = saved;
+  } catch { /* No saved optimization yet. */ }
+  function markdown(element, text) {
+    element.innerHTML = DOMPurify.sanitize(marked.parse(text || ''), { USE_PROFILES: { html: true } });
+  }
+  function savePrompts() { localStorage.setItem(promptStorageKey, JSON.stringify(promptState)); }
+  function showFinal() {
+    $('#ai-final-prompt').value = promptState.final;
+    $('#final-prompt-section').hidden = !promptState.final;
+    markdown($('#final-prompt-preview'), promptState.final);
+  }
+  function addPromptRun(run) {
+    $('#prompt-process').hidden = false;
+    const section = document.createElement('details'); section.open = true;
+    const heading = document.createElement('summary');
+    heading.textContent = `${new Date(run.createdAt).toLocaleString()} · ${run.pipeline ? '三模型协作' : '提示词优化'}`;
+    const source = document.createElement('div'); source.className = 'markdown-output';
+    markdown(source, run.source);
+    section.append(heading, source);
+    const outputs = run.stages.map(stage => {
+      const title = document.createElement('h4'); title.textContent = `${stage.label} · ${stage.model}`;
+      const output = document.createElement('div'); output.className = 'markdown-output prompt-stage';
+      markdown(output, stage.text); section.append(title, output); return output;
+    });
+    if (run.error) { const error = document.createElement('p'); error.textContent = run.error; section.append(error); }
+    $('#prompt-runs').prepend(section); return outputs;
+  }
+  promptState.runs.forEach(addPromptRun); showFinal();
+  $('#ai-final-prompt').oninput = e => {
+    promptState.final = e.target.value; markdown($('#final-prompt-preview'), promptState.final); savePrompts();
+  };
   function status(message, edit = false) {
     $(edit ? '#edit-status' : '#ai-status').textContent = message;
     if (!edit) { $('#studio-feedback').textContent = message; $('#studio-progress p').textContent = message; }
@@ -105,21 +142,21 @@ export async function setupAI({ poseImage, characters, toast }) {
     const files = [...(e.clipboardData?.items || [])].filter(item => item.type.startsWith('image/')).map(item => item.getAsFile()).filter(Boolean);
     if (files.length) { e.preventDefault(); addFiles(files); }
   });
-  async function request(args, onText) {
+  async function request(args, onText, textOutput) {
     if (!bridge?.requestAI) throw new Error('AI 功能需要 Electron 桌面应用，请使用 npm start 启动。');
     $('#ai-error-details').hidden = true;
     const requestId = crypto.randomUUID();
-    const output = $('#image-dialog').open ? $('#layer-stream-output') : $('#ai-stream-output');
+    const output = textOutput || ($('#image-dialog').open ? $('#layer-stream-output') : $('#ai-stream-output'));
     if (args.purpose === 'text') { output.hidden = false; output.textContent = ''; }
     const unsubscribe = args.purpose === 'text' ? bridge.onAIText?.(data => {
       if (data.requestId !== requestId) return;
-      output.textContent = data.text;
+      markdown(output, data.text);
       onText?.(data.text);
     }) : null;
     let response;
     try { response = await bridge.requestAI({ ...args, stream: args.purpose === 'text', requestId }); }
     finally { unsubscribe?.(); }
-    if (args.purpose === 'text' && response.ok) { output.textContent = response.text; onText?.(response.text); }
+    if (args.purpose === 'text' && response.ok) { markdown(output, response.text); onText?.(response.text); }
     if (!response.ok) {
       if (response.diagnostics) {
         const info = response.diagnostics;
@@ -160,7 +197,7 @@ export async function setupAI({ poseImage, characters, toast }) {
     setBusy(true); status('正在生成，请稍候…');
     try {
       const model = models.find(m => m.id === $('#ai-model').value);
-      const text = $('#ai-prompt').value.trim(); if (!text) throw new Error('请填写提示词。');
+      const text = ($('#ai-final-prompt').value || $('#ai-prompt').value).trim(); if (!text) throw new Error('请填写提示词。');
       const { images, labels } = inputReferences();
       const prompt = `${text}\n${scenePrompt()}\n${labels}`;
       const result = await request({ model, prompt, images, size: imageSize(), purpose: 'image' });
@@ -172,6 +209,7 @@ export async function setupAI({ poseImage, characters, toast }) {
   async function optimize(pipeline) {
     if (busy) return;
     setBusy(true);
+    let run;
     try {
       const source = $('#ai-prompt').value.trim(); if (!source) throw new Error('请先填写提示词。');
       const { images, labels } = inputReferences();
@@ -184,14 +222,17 @@ export async function setupAI({ poseImage, characters, toast }) {
       ] : [[$('#ai-optimizer').value, '优化或审查后改进这段生图提示词，只返回最终提示词。']];
       const selected = stages.map(([id]) => models.find(m => m.id === id && m.kind === 'text'));
       if (selected.some(m => !m)) throw new Error('三模型协作所需模型已被修改，请在设置中恢复对应名称。');
+      run = { createdAt: new Date().toISOString(), pipeline, source, stages: selected.map((model, i) => ({ model: model.id, label: pipeline ? ['优化初稿', '审查建议', '最终综合'][i] : '优化结果', text: '' })) };
+      promptState.runs.push(run); savePrompts();
+      const outputs = addPromptRun(run); $('#prompt-process').open = true;
       let firstDraft = '';
       for (let i = 0; i < stages.length; i++) {
         status(`提示词处理 ${i + 1}/${stages.length}：${selected[i].id}`);
-        const result = await request({ model: selected[i], purpose: 'text', images: selected[i].references ? images : [], prompt: `${stages[i][1]}\n不得改变人数和人脸身份要求，不添加用户未要求的角色。\n${constraints}\n${firstDraft ? `优化初稿：${firstDraft}\n` : ''}当前草稿或审查意见：${draft}` });
-        draft = result.text; if (i === 0) firstDraft = draft;
+        const result = await request({ model: selected[i], purpose: 'text', images: selected[i].references ? images : [], prompt: `${stages[i][1]}\n不得改变人数和人脸身份要求，不添加用户未要求的角色。\n${constraints}\n${firstDraft ? `优化初稿：${firstDraft}\n` : ''}当前草稿或审查意见：${draft}` }, text => { run.stages[i].text = text; savePrompts(); }, outputs[i]);
+        draft = result.text; savePrompts(); if (i === 0) firstDraft = draft;
       }
-      $('#ai-prompt').value = draft; status('提示词已优化，可编辑后生图。');
-    } catch (err) { status(err.message); }
+      promptState.final = draft; showFinal(); savePrompts(); status('提示词已优化，最终提示词可编辑后生图。');
+    } catch (err) { if (run) { run.error = err.message; savePrompts(); } status(err.message); }
     finally { setBusy(false); if (!currentImage) { $('#studio-edit').disabled = $('#studio-layers').disabled = true; } }
   }
   $('#btn-optimize').onclick = () => optimize(false);

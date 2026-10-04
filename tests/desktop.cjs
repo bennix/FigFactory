@@ -19,7 +19,7 @@ global.fetch = async (url, options) => {
   calls.push({ url, body, multipart: options.body instanceof FormData });
   if (url.endsWith('/chat/completions')) {
     const planner = body.messages[0].content[0].text.includes('只输出 JSON');
-    const content = planner ? JSON.stringify({ layers: ['文字', '文字底板', '主体', '背景'].map(name => ({ name, description: `保留${name}，其他区域透明。` })) }) : '优化后的提示词：保留人物身份与构图。';
+    const content = planner ? JSON.stringify({ layers: ['文字', '文字底板', '主体', '背景'].map(name => ({ name, description: `保留${name}，其他区域透明。` })) }) : '## 优化后的提示词\n\n保留**人物身份**与构图。<img src=x onerror=alert(1)>';
     if (body.stream) return {
       ok: true, headers: { get: name => name === 'content-type' ? 'text/event-stream' : null },
       body: (async function* () {
@@ -106,7 +106,8 @@ app.whenReady().then(async () => {
     await until(`document.querySelector('#ai-status').textContent.includes('提示词已优化')`);
     assert.ok(await run(`window.__streamUpdates.length >= 6 && window.__streamUpdates.some(text => text.length === 3)`));
     await run(`window.__stopStream()`);
-    assert.ok(await run(`!document.querySelector('#ai-stream-output').hidden && document.querySelector('#ai-stream-output').textContent.includes('优化后的提示词')`));
+    assert.ok(await run(`document.querySelectorAll('.prompt-stage').length === 3 && [...document.querySelectorAll('.prompt-stage')].every(el => el.querySelector('h2') && el.querySelector('strong') && !el.querySelector('[onerror]'))`));
+    assert.ok(await run(`document.querySelector('#ai-final-prompt').value.includes('优化后的提示词') && document.querySelector('#final-prompt-preview strong').textContent === '人物身份' && document.querySelector('#ai-prompt').value === '两个人物的摄影参考'`));
     assert.deepEqual(calls.slice(2).map(call => call.body.model), ['openai/gpt-6.1-sol', 'anthropic/claude-sonnet-5.5', 'google/gemini-3.8-flash']);
     await run(`document.querySelector('#btn-history').click()`);
     await until(`document.querySelectorAll('.history-card').length === 2`);
@@ -122,6 +123,7 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('#image-dialog').close(); document.querySelector('#history-dialog').close()`);
     await sleep(500); win.reload(); await sleep(500);
     await until('!!window.__bf && document.querySelector("#ai-model").options.length === 6');
+    assert.ok(await run(`document.querySelectorAll('.prompt-stage').length === 3 && document.querySelector('#ai-final-prompt').value.includes('优化后的提示词') && document.querySelector('#final-prompt-preview strong')`));
     assert.equal(await run(`document.documentElement.dataset.theme`), 'light');
     assert.equal(await run(`getComputedStyle(document.documentElement).getPropertyValue('--text').trim()`), '#182338');
     assert.equal(await run(`window.__bf.figures.length`), 2);
