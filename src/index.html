@@ -204,7 +204,7 @@
         <input type="file" id="ref-file" accept="image/png,image/jpeg,image/webp" multiple hidden />
         <div id="ref-thumbs" class="ref-thumbs"></div><p class="ai-note">缩略图下可修改参考类型；场景图由“场景与照明”开关控制，不绑定人偶。</p>
         <p class="ai-note">每个人物只保留一张权威人脸图；它只锁定身份。全身/服饰、姿态和场景参考各自分工，生成结果不会自动替换身份图。</p>
-        <label class="ai-field">固定身份合同<textarea id="ai-identity-contract" rows="3" placeholder="例如：人偶 1 不可变：齐下巴黑波波头、左眼下的痣、眼镜；禁止换发型或加首饰。可按人物编号分别填写…"></textarea></label>
+        <label class="ai-field">固定身份合同（有人脸参考时生效）<textarea id="ai-identity-contract" rows="3" placeholder="例如：人偶 1 不可变：齐下巴黑波波头、左眼下的痣、眼镜；禁止换发型或加首饰。可按人物编号分别填写…"></textarea></label>
         <label class="ai-field">服饰提示词<textarea id="ai-clothing-prompt" rows="3" placeholder="有服饰参考时，生图前由 AI 补全空白内容；也可手动填写…"></textarea></label>
         <div id="studio-pose-reference">
           <div class="pose-ref-heading"><label class="switch"><input type="checkbox" id="ai-use-pose" /><span></span>形态参考</label><button class="link" id="btn-pose-editor">编辑人偶 ↗</button></div>
@@ -222,7 +222,7 @@
         </section>
         <label class="ai-field">出图比例<select id="studio-size"><option value="1024x1024">方形 · 1:1</option><option value="1024x1536">竖图 · 2:3</option><option value="1536x1024">横图 · 3:2</option></select></label>
         <p class="ai-note">人脸参考优先保留五官、脸型和身份特征；实际保真度取决于模型。</p>
-        <p class="ai-note">每次生图清除上次自动内容，重新捕获姿态并审视当前参考与最终提示词；保留手工输入和权威身份图，不复用上次分析。</p>
+        <p class="ai-note">有人脸参考时，每次生图清除上次自动内容并重新审视全部当前参考与最终提示词；保留手工输入和权威身份图。没有人脸参考时保持原有流程。</p>
         <p id="ai-reference-check" class="ai-note" role="status">添加场景参考图时会自动开启场景与照明；主动关闭后不会发送场景参考。</p>
         <details id="ai-request-review" hidden><summary>本次审视后的实际生图提示词</summary><div id="ai-request-preview" class="markdown-output"></div></details>
         <button class="primary wide" id="btn-generate">生成图像</button>
