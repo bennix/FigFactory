@@ -7,6 +7,43 @@ const { makePSD } = require('./src/psd.cjs');
 const { readTextStream } = require('./src/zenmux-stream.cjs');
 const { responseFailure } = require('./src/zenmux-errors.cjs');
 
+const { WeightStore } = require('./src/local-weights.cjs');
+const { LocalEngine } = require('./src/local-ai.cjs');
+let localWeights, localEngine;
+function localServices() {
+  if (!localWeights) {
+    const bundled = path.join(process.resourcesPath, 'local-ai');
+    const hasBundledRuntime = app.isPackaged && fs.existsSync(path.join(bundled, 'models', 'catalog.json')) && fs.existsSync(path.join(bundled, 'engine', 'ready.json'));
+    const modelsRoot = hasBundledRuntime ? path.join(bundled, 'models') : path.join(app.getPath('userData'), 'local-models');
+    const engineRoot = hasBundledRuntime ? path.join(bundled, 'engine') : path.join(app.getPath('userData'), 'local-engine');
+    const runtimeRoot = hasBundledRuntime ? path.join(app.getPath('userData'), 'local-engine-runtime') : engineRoot;
+    localWeights = new WeightStore(modelsRoot);
+    localEngine = new LocalEngine(engineRoot, localWeights, runtimeRoot);
+  }
+  return { weights: localWeights, engine: localEngine };
+}
+ipcMain.handle('local-ai', async (event, { action, ...args }) => {
+  const { weights, engine } = localServices();
+  const progress = data => { if (!event.sender.isDestroyed()) event.sender.send('local-ai-progress', data); };
+  try {
+    let result;
+    switch (action) {
+      case 'status': result = engine.status(); break;
+      case 'catalog': result = await weights.catalog(args.refresh); break;
+      case 'download': if (engine.bundled) throw new Error('此离线版已内置并校验 Turbo 权重，不能修改应用包内文件。'); result = await weights.download(args.dit, args.encoder, progress, args.mirror); break;
+      case 'cancel-download': weights.cancel(); break;
+      case 'install': result = await engine.install(progress, args.mirror); break;
+      case 'start': result = await engine.start(progress); break;
+      case 'stop': engine.stop(); break;
+      case 'generate': result = await engine.generate(args, progress); break;
+      case 'open-models': fs.mkdirSync(weights.root, { recursive: true }); await shell.openPath(weights.root); break;
+      default: throw new Error('未知本地操作。');
+    }
+    return { ok: true, result };
+  } catch (error) { return { ok: false, error: error.name === 'AbortError' ? '已取消，下载断点已保留。' : error.message }; }
+});
+app.on('before-quit', () => { localWeights?.cancel(); localEngine?.stop(); });
+
 function createWindow() {
   nativeTheme.themeSource = 'dark';
   const win = new BrowserWindow({
@@ -184,5 +221,6 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  localEngine?.stop();
   if (process.platform !== 'darwin') app.quit();
 });

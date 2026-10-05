@@ -104,3 +104,28 @@ OpenAI 官方 [Image prompting](https://developers.openai.com/api/docs/guides/im
 ## Grok Imagine Image 2.0 参数适配
 
 用户实际调用 `x-ai/grok-imagine-image-2.0` 返回 422：`resolution` 不接受 `1024x1024`，期望 `1k`、`2k`、`1.5k`。ZenMux [模型页](https://zenmux.ai/x-ai/grok-imagine-image-2.0) 确认支持生图与编辑；xAI [生图文档](https://docs.x.ai/developers/model-capabilities/images/generation) 将 `resolution` 与 `aspect_ratio` 分开，且支持 `response_format=b64_json`。对这个确切型号使用 OpenAI Images 入口，发送 `resolution=1k` 与当前画幅比例，不传 GPT 专属 `size`、`input_fidelity` 或 `output_format`。不自动重试付费生成。覆盖三种画幅、纯生图、参考编辑、multipart 和旧接口设置迁移；平台实际请求仍需重试确认。
+
+## 本地 Qwen-Image-2.1 Turbo（应用管理 ComfyUI）
+
+本地模式和 ZenMux 使用独立生成路径。参考图在本机上传给仅监听 127.0.0.1 的 ComfyUI；不自动调用云端视觉预检或拆层，不自动回退云端。提示词优化独立使用 ZenMux：用户点击优化后才发送文字及所选参考图，生图服务仍可选择本地。可用同一套身份合同、当前姿态、服饰、场景与涂鸦参考，以及本地历史和图片导出。空白需求需手填，涂鸦须附修改说明。
+
+设置页可提前下载主模型、文本编码器、视觉投影（GGUF 编码器必需）、Viggle 4 步 Turbo LoRA 和 VAE；根据 Hugging Face 不可变 revision 下载，支持 HF 镜像、断点续传、取消与 SHA-256 校验；镜像无法满足断点时保留当前文件并尝试原站。Python 依赖可使用清华 PyPI 镜像。MLX 文件仅预下载，当前 ComfyUI 路径无法运行 MLX。Q4_K_M 全 GGUF 组合约 11.00 GiB。模型不打包进安装包。
+
+首次安装使用独立 uv/Python 3.12 环境，不修改系统 Python。ComfyUI、ComfyUI-GGUF 和 Qwen3VL 插件按安装时的 Git SHA 保存。本机启动后检测节点与所选模型文件。Apple Silicon 使用 PyTorch MPS、CPU VAE 及 MPS 运算回退；GGUF 编码器插件上游未验证 Mac，因此仍为实验性。Intel Mac 托管引擎暂不支持。
+
+`TextEncodeQwenImage21` 支持 16 个输入（`images.image_1` 至 `images.image_16`），上传顺序保留各图职责。编辑使用该节点产生的 latent，画幅跟随首张参考，避免官方源码指出的尺寸错位。文字生图使用所选画幅的 EmptyLatentImage。参考保真度需实际模型验证，不能承诺绝对身份一致。
+
+来源：
+- https://github.com/Comfy-Org/ComfyUI/blob/master/comfy_extras/nodes_qwen.py
+- https://github.com/leejet/ComfyUI-GGUF
+- https://github.com/pottokao-dotcom/ComfyUI-GGUF-Qwen3VL-TE
+- https://huggingface.co/abenzerps/Qwen-Image-2.1-Uncensored-GGUF
+- https://huggingface.co/pottokao/Qwen-Image-2.1-Text-Encoder-Heretic-GGUF
+
+
+按用户选择，本地仅提供 4 步 Turbo：加载 UC GGUF + Heretic 编码器 + `Qwen-Image-2.1-viggle-turbo-4step-lora-r64.safetensors`（339,832,808 bytes），通过 `LoraLoaderModelOnly` 在模型路径加载强度 1.0 的 LoRA，KSampler 固定 steps=4/cfg=1/euler/simple/denoise=1，negative_prompt 为空。没有 25 步普通模式；不能把 6 步或普通权重当成 4 步版本。Viggle 当前主卡已转为 v0.3 6 步，但本应用锁定独立的早期 4 步文件；不套用新版 LoRA、sigma 节点或采样设定。GGUF patcher 负责在去量化后应用 LoRA。实际兼容性仍须 MPS 实测。
+
+- https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo
+- https://huggingface.co/Abiray/Qwen-Image-2.1-viggle-4-steps-turbo-GGUF （4 步 simple 参数与编辑示例；本应用当前采用 UC 主模型 + LoRA，不额外下载该合并主模型）
+
+为了使用应用自身界面，托管 ComfyUI 只安装 API/推理依赖，不安装网页前端、工作流模板与嵌入文档包。启动显式设置本地最小 frontend root 和 offline；工作流模板依赖缺包不再阻止引擎安装。本地 API 节点和自有 Electron UI 的加载需要桌面及实机 smoke 分别验证。

@@ -3,11 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://zenmux.ai;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' https://zenmux.ai;" />
   <meta name="description" content="BodyFactory AI 图像工作台：提示词与人物参考输入、ZenMux 生图、涂鸦修图和分层 PSD 导出。" />
   <title>BodyFactory · AI 图像创作工作台</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
   <script>
     try { document.documentElement.dataset.theme = localStorage.getItem('bodyfactory.theme') === 'light' ? 'light' : 'dark'; }
     catch { document.documentElement.dataset.theme = 'dark'; }
@@ -189,10 +187,12 @@
 
       <section class="card accent" id="sec-ai">
         <header><h2>生图设置</h2><button class="link" id="btn-history">历史管理</button></header>
+        <label class="ai-field">生图服务<select id="ai-provider"><option value="zenmux">ZenMux 云端</option><option value="local">本地 Qwen-Image-2.1 Turbo · 4 步</option></select></label>
+        <div id="local-controls" hidden><label class="ai-field">主模型<select id="local-dit"></select></label><label class="ai-field">文本编码器<select id="local-encoder"></select></label><p id="local-readiness" class="ai-note" role="status">本地 AI：正在检查运行环境与权重…</p><label class="switch"><input type="checkbox" id="local-service-toggle" /><span></span>本地 AI 生图服务</label><p class="ai-note" id="local-engine-state" role="status">本地生图服务：尚未启动</p><div class="row2"><button class="ghost" id="local-settings">本地引擎与权重设置</button><button class="ghost" id="local-stop-now" disabled>立即关闭本地服务</button></div><p class="ai-note">Apple Silicon + Q4_K_M + Heretic W4A8 已验证；首次使用请在设置中下载所需权重。生图服务生成时按需启动，空闲 2 分钟自动关闭。提示词优化走 ZenMux，点击优化会提交文字及所选参考图。</p></div>
         <label class="ai-field">生图模型<select id="ai-model"></select></label>
         <p class="ai-note" id="ai-model-note"></p>
         <label class="ai-field">原始提示词<textarea id="ai-prompt" rows="4" placeholder="描述人物、服装、场景与画风…"></textarea></label>
-        <label class="ai-field">提示词优化<select id="ai-optimizer"></select></label>
+        <label class="ai-field">提示词优化 · ZenMux<select id="ai-optimizer"></select></label>
         <div class="row2"><button class="ghost small" id="btn-optimize">优化提示词</button><button class="ghost small" id="btn-pipeline">三模型协作优化</button></div>
         <details id="prompt-process" hidden><summary>提示词优化过程</summary><div id="prompt-runs"></div></details>
         <section id="final-prompt-section" hidden>
@@ -260,7 +260,7 @@
   </div>
 
   <dialog id="settings-dialog" class="ai-dialog">
-    <header><h2>ZenMux 设置</h2><button class="ghost" data-close>关闭</button></header>
+    <header><h2>AI 设置</h2><button class="ghost" data-close>关闭</button></header>
     <label class="ai-field">外观主题<select id="ui-theme"><option value="dark">暗色</option><option value="light">亮色</option></select></label>
     <p class="ai-note">主题切换立即生效，并在本机保存。</p>
     <p class="ai-note">Base URL：https://zenmux.ai/api/v1 · Vertex AI：https://zenmux.ai/api/vertex-ai</p>
@@ -271,6 +271,12 @@
     <pre id="key-validation" class="ai-note" style="white-space:pre-wrap" aria-live="polite"></pre>
     <img id="key-validation-image" hidden alt="API Key 生图验证结果" style="width:128px;height:128px;object-fit:contain" />
     <a href="https://zenmux.ai/invite/GBQMC5" id="zenmux-invite" target="_blank" rel="noreferrer">没有 API Key？使用邀请链接注册 ZenMux ↗</a>
+    <section class="card"><h3>本地 Qwen-Image-2.1 Turbo · 应用管理引擎</h3>
+    <p class="ai-note">本地 Qwen-Image-2.1 Turbo 使用 UC 主模型、Heretic 文本编码器、指定 LoRA 和 VAE。推荐 Heretic W4A8（约 5.88 GiB），Apple Silicon 实机已验证文生图与参考图编辑；选择并下载权重后即可运行。固定 4 步、CFG 1、Euler、Simple、空负面提示词。</p>
+    <label class="ai-field">下载源<select id="local-mirror"><option value="mirror">HF 镜像 / 清华 PyPI 镜像</option><option value="official">Hugging Face / PyPI 原站</option></select></label><p class="ai-note">权重由你在此选择和下载，保存在本机应用数据目录；按 Hugging Face 仓库版本及 SHA-256 校验，支持断点续传。镜像不可用时尝试原站。</p><label class="ai-field">下载主模型<select id="local-download-dit"></select></label><label class="ai-field">下载文本编码器<select id="local-download-encoder"></select></label><p id="local-summary" class="ai-note"></p><div id="local-catalog" class="ai-note"></div>
+    <div class="row2"><button class="ghost" id="local-refresh">刷新权重目录</button><button class="primary" id="local-download">下载所选整套权重</button><button class="ghost" id="local-cancel">取消下载</button><button class="ghost" id="local-folder">打开权重目录</button></div>
+    <p id="local-settings-readiness" class="ai-note" role="status">本地 AI：正在检查运行环境与权重…</p><label class="switch"><input type="checkbox" id="local-service-settings-toggle" /><span></span>本地 AI 生图服务</label><p class="ai-note" id="local-engine-settings-state" role="status">本地生图服务：尚未启动</p><div class="row2"><button class="ghost" id="local-install">首次安装引擎</button><button class="primary" id="local-start">启动引擎</button><button class="ghost" id="local-stop">停止引擎 / 取消生成</button></div>
+    <progress id="local-progress" hidden style="width:100%"></progress><p id="local-status" class="ai-note" role="status"></p></section>
     <h3>模型列表</h3><p class="ai-note">可修改名称、接口、是否支持参考图与参考图上限。未核实的模型请先验证平台支持情况。</p>
     <div id="model-editor"></div>
     <div class="row2"><button class="ghost" id="btn-add-image">＋ 生图模型</button><button class="ghost" id="btn-add-text">＋ 优化模型</button><button class="ghost" id="btn-add-layer">＋ 拆层模型</button></div>

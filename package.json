@@ -1,17 +1,21 @@
 {
   "name": "body-factory",
   "productName": "BodyFactory 形体工坊",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "AI image creation studio with pose references, image editing and layered PSD export",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "web": "python3 -m http.server 5173",
-    "test": "node --test tests/zenmux.cjs tests/psd.cjs tests/zenmux-errors.cjs tests/zenmux-stream.cjs",
+    "test": "node --test tests/zenmux.cjs tests/psd.cjs tests/zenmux-errors.cjs tests/zenmux-stream.cjs tests/local-ai.cjs",
     "test:desktop": "electron tests/desktop.cjs",
-    "build:mac": "electron-builder --mac",
+    "prepare:offline-mac": "node scripts/prepare-local-runtime.cjs",
+    "build:mac": "electron-builder --mac --arm64 --x64",
     "build:win": "electron-builder --win",
-    "build:linux": "electron-builder --linux"
+    "build:linux": "electron-builder --linux",
+    "test:local-desktop": "electron tests/local-desktop.cjs",
+    "test:local-smoke": "node scripts/local-smoke.cjs",
+    "test:local-lifecycle": "electron tests/local-lifecycle-desktop.cjs"
   },
   "license": "MIT",
   "dependencies": {

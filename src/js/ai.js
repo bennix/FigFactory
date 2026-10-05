@@ -32,6 +32,135 @@ async function historyTransaction(mode, action) {
 
 export async function setupAI({ poseImage, characters, toast }) {
   const bridge = window.bodyFactory;
+  const localMode = () => $('#ai-provider').value === 'local';
+  const localModel = { id: 'local/Qwen-Image-2.1-Turbo-4step', kind: 'image', references: true, maxReferences: 16 };
+  async function localCall(action, args = {}) {
+    if (!bridge?.localAI) throw new Error('本地引擎需要 Electron 桌面应用。');
+    const response = await bridge.localAI({ action, ...args });
+    if (!response.ok) throw new Error(response.error);
+    return response.result;
+  }
+  let localServiceSwitching = false;
+  let localEngineStatus = null;
+  function showLocalReadiness() {
+    let message = '本地 AI：正在检查运行环境与权重…';
+    if (localEngineStatus && localCatalog.length) {
+      const { dit, encoder } = localSelection();
+      const ids = [dit, encoder, ...(!['te-bf16', 'te-w4a8'].includes(encoder) ? ['vision'] : []), 'turbo-lora', 'vae'];
+      const required = ids.map(id => localCatalog.find(item => item.id === id));
+      const missing = required.filter(item => !item?.downloaded);
+      if (required[0]?.runnable === false) {
+        message = '本地 AI 尚未就绪：所选 MLX 主模型仅支持预下载，请选择 GGUF 主模型进行本地生图。';
+      } else if (localEngineStatus.installed && !missing.length) {
+        message = `✓ 本地 AI 已就绪：运行环境已安装，所选 ${required.length} 项权重均已下载并校验，可以本地生图。`;
+      } else {
+        const needs = [];
+        if (!localEngineStatus.installed) needs.push(localEngineStatus.installing ? '运行环境正在安装' : '请在设置中安装本地引擎');
+        if (missing.length) needs.push(`请下载并校验：${missing.map(item => item?.label || '所选模型').join('、')}`);
+        message = `本地 AI 尚未就绪：${needs.join('；')}。`;
+      }
+    }
+    for (const id of ['#local-readiness', '#local-settings-readiness']) $(id).textContent = message;
+  }
+  function renderLocalEngineState(state) {
+    localEngineStatus = state;
+    showLocalReadiness();
+    let label = '本地生图服务：尚未启动';
+    if (state.starting) label = '本地生图服务：正在启动…';
+    else if (state.generating) label = '本地生图服务：正在生成；完成后空闲 2 分钟自动关闭';
+    else if (state.running) label = `本地生图服务：运行中；空闲 ${Math.max(1, Math.ceil((state.idleRemainingMs ?? state.idleTimeoutMs) / 60000))} 分钟后自动关闭`;
+    else if (state.installed) label = '本地生图服务：已关闭，需要生成时自动启动';
+    else label = '本地生图服务：引擎尚未安装';
+    ['#local-engine-state', '#local-engine-settings-state'].forEach(id => { if ($(id)) $(id).textContent = label; });
+    for (const id of ['#local-service-toggle', '#local-service-settings-toggle']) {
+      $(id).checked = state.running || state.starting;
+      $(id).disabled = localServiceSwitching || state.starting || !state.installed;
+    }
+    if ($('#local-stop-now')) $('#local-stop-now').disabled = !state.running && !state.starting;
+    if ($('#local-stop')) $('#local-stop').disabled = !state.running && !state.starting && !state.installing;
+  }
+  async function refreshLocalEngineState() {
+    try { renderLocalEngineState(await localCall('status')); } catch { /* Refresh when the desktop bridge is available. */ }
+  }
+  for (const id of ['#local-service-toggle', '#local-service-settings-toggle']) $(id).onchange = async event => {
+    if (localServiceSwitching) return;
+    const action = event.target.checked ? 'start' : 'stop';
+    localServiceSwitching = true;
+    for (const toggle of ['#local-service-toggle', '#local-service-settings-toggle']) $(toggle).disabled = true;
+    $('#local-engine-state').textContent = $('#local-engine-settings-state').textContent = action === 'start' ? '本地生图服务：正在启动…' : '本地生图服务：正在关闭…';
+    try { await localCall(action); }
+    catch (error) { $('#local-status').textContent = error.message; toast(error.message); }
+    finally { localServiceSwitching = false; await refreshLocalEngineState(); }
+  };
+  let localCatalog = [], localBundled = false;
+  function localSelection() { return { dit: $('#local-dit').value, encoder: $('#local-encoder').value, mirror: $('#local-mirror').value === 'mirror' }; }
+  $('#local-mirror').value = localStorage.getItem('bodyfactory.local-mirror') || 'mirror';
+  $('#local-mirror').onchange = () => localStorage.setItem('bodyfactory.local-mirror', $('#local-mirror').value);
+  function showLocalCatalog() {
+    const { dit, encoder } = localSelection();
+    const ids = [dit, encoder, ...(!['te-bf16', 'te-w4a8'].includes(encoder) ? ['vision'] : []), 'turbo-lora', 'vae'];
+    const items = localCatalog.filter(item => ids.includes(item.id));
+    $('#local-catalog').textContent = items.map(item => `${item.label} · ${(item.size / 1024 ** 3).toFixed(2)} GiB · ${item.downloaded ? '已下载并校验' : '待下载'}`).join('；');
+    $('#local-summary').textContent = `所选整套 ${(items.reduce((sum, item) => sum + item.size, 0) / 1024 ** 3).toFixed(2)} GiB；${items.length && items.every(item => item.downloaded) ? '权重齐全' : '权重未齐全'}。`;
+    showLocalReadiness();
+    if (localBundled) {
+      $('#local-summary').textContent = '内置离线运行时：已包含并校验 Q4_K_M、Heretic、视觉投影、Turbo LoRA 与 VAE。';
+      ['#local-refresh', '#local-download', '#local-cancel', '#local-install', '#local-mirror', '#local-download-dit', '#local-download-encoder'].forEach(id => { $(id).disabled = true; });
+      $('#local-status').textContent = '内置引擎与权重已就绪；首次生成会加载到内存。';
+    }
+  }
+  async function loadLocalCatalog(refresh = false) {
+    localCatalog = await localCall('catalog', { refresh });
+    localBundled = (await localCall('status')).bundled === true;
+    for (const [id, group, fallback] of [['#local-dit', 'diffusion_models', 'dit-Q4_K_M'], ['#local-encoder', 'text_encoders', 'te-w4a8']]) {
+      const old = $(id).value || localStorage.getItem('bodyfactory.' + id.slice(1)) || fallback;
+      $(id).replaceChildren(...localCatalog.filter(item => item.group === group && (group !== 'text_encoders' || item.id.startsWith('te-'))).map(item => new Option(item.label, item.id)));
+      $(id).value = old;
+    }
+    for (const key of ['dit', 'encoder']) { $('#local-download-' + key).replaceChildren(...[...$('#local-' + key).options].map(option => new Option(option.text, option.value))); $('#local-download-' + key).value = $('#local-' + key).value; }
+    showLocalCatalog();
+  }
+  const cloudButtons = ['#btn-plan-layers', '#btn-discuss-layers', '#btn-split-layers'];
+  function showProvider() {
+    $('#local-controls').hidden = !localMode();
+    $('#ai-model-note').textContent = localMode() ? '本地 Qwen-Image-2.1 Turbo：固定 4 步 / CFG 1 / Euler / Simple；Apple Silicon + Q4_K_M + Heretic W4A8 已验证文生图和参考图编辑。首次使用请先在 AI 设置中下载并校验所需权重。' : models.find(model => model.id === $('#ai-model').value)?.note || '请确认模型的接口与参考图能力。';
+    $('#ai-model').disabled = localMode() || busy;
+    $('#edit-model').disabled = localMode() || busy;
+    $('#ai-provider').disabled = busy;
+    cloudButtons.forEach(id => { $(id).disabled = busy || localMode(); });
+    $('#studio-layers').disabled = busy || localMode() || !currentImage;
+  }
+  $('#ai-provider').value = localStorage.getItem('bodyfactory.provider') || 'zenmux';
+  $('#ai-provider').onchange = () => { localStorage.setItem('bodyfactory.provider', $('#ai-provider').value); showProvider(); if (localMode()) { refreshLocalEngineState(); if (!localCatalog.length) loadLocalCatalog().catch(error => status(error.message)); } };
+  $('#local-settings').onclick = () => $('#settings-dialog').showModal();
+  for (const key of ['dit', 'encoder']) for (const prefix of ['local-', 'local-download-']) $('#' + prefix + key).onchange = e => { $('#local-' + key).value = $('#local-download-' + key).value = e.target.value; localStorage.setItem('bodyfactory.local-' + key, e.target.value); showLocalCatalog(); };
+  $('#settings-dialog').addEventListener('toggle', () => { if ($('#settings-dialog').open && !localCatalog.length) loadLocalCatalog().catch(error => { $('#local-status').textContent = error.message; }); });
+  bridge?.onLocalProgress?.(data => {
+    const text = data.message + (data.total ? ` · ${(100 * data.received / data.total).toFixed(1)}%` : '');
+    $('#local-status').textContent = text;
+    $('#local-progress').hidden = !data.total;
+    if (data.total) { $('#local-progress').max = data.total; $('#local-progress').value = data.received; }
+    if (busy && localMode()) status(text, $('#image-dialog').open);
+  });
+  let localOperation = false;
+  for (const [id, action] of [['#local-refresh', 'catalog'], ['#local-download', 'download'], ['#local-cancel', 'cancel-download'], ['#local-install', 'install'], ['#local-start', 'start'], ['#local-stop', 'stop'], ['#local-stop-now', 'stop'], ['#local-folder', 'open-models']]) $(id).onclick = async () => {
+    const independent = ['stop', 'cancel-download', 'open-models'].includes(action);
+    if (localOperation && !independent) return;
+    if (!independent) localOperation = true;
+    $(id).disabled = true;
+    try {
+      if (!localCatalog.length && action === 'download') await loadLocalCatalog();
+      await localCall(action, { ...localSelection(), refresh: true });
+      if (['catalog', 'download'].includes(action)) await loadLocalCatalog();
+      const state = await localCall('status');
+      renderLocalEngineState(state);
+      $('#local-status').textContent = `${state.platform === 'darwin' && state.arch === 'arm64' ? 'Apple Silicon · MPS GPU · ' : ''}${(state.memory / 1024 ** 3).toFixed(0)} GiB 内存。${state.bundled ? '内置离线运行时；' : ''}${action === 'stop' ? '引擎已停止。' : action === 'cancel-download' ? '已请求取消下载。' : '操作完成。'}引擎${state.running ? '运行中' : state.installed ? '已安装' : '未安装'}。`;
+    } catch (error) { $('#local-status').textContent = error.message; }
+    finally { $(id).disabled = false; if (!independent) localOperation = false; }
+  };
+  $('#settings-dialog').addEventListener('toggle', () => { if ($('#settings-dialog').open) refreshLocalEngineState(); });
+  const localStatePoll = setInterval(() => { if (localMode() || $('#settings-dialog').open) refreshLocalEngineState(); }, 2000);
+  window.addEventListener('pagehide', () => clearInterval(localStatePoll), { once: true });
   const posePreference = 'bodyfactory.use-pose';
   $('#ai-use-pose').checked = localStorage.getItem(posePreference) === 'true';
   const savePosePreference = () => localStorage.setItem(posePreference, String($('#ai-use-pose').checked));
@@ -95,6 +224,7 @@ export async function setupAI({ poseImage, characters, toast }) {
     $('#btn-generate').textContent = value ? '处理中…' : '生成图像';
     ['#btn-generate', '#btn-optimize', '#btn-pipeline', '#btn-edit-image', '#btn-plan-layers', '#btn-discuss-layers', '#btn-split-layers', '#btn-scene-prompt'].forEach(id => { $(id).disabled = value; });
     ['#btn-pose-editor', '#ai-identity-contract', '#ai-use-pose', '#ai-prompt', '#ai-final-prompt', '#ai-model', '#ai-optimizer', '#ref-kind', '#ref-person', '#btn-ref', '#ai-use-scene', '#ai-scene-source', '#ai-lighting-source', '#ai-scene-prompt', '#ai-clothing-prompt', '#ai-pose-prompt'].forEach(id => { $(id).disabled = value; });
+    showProvider();
     $('#ref-person').disabled = value || $('#ref-kind').value === 'scene';
     ['#studio-copy', '#studio-save', '#studio-edit', '#studio-layers'].forEach(id => { $(id).disabled = value || !currentImage; });
   }
@@ -112,6 +242,7 @@ export async function setupAI({ poseImage, characters, toast }) {
     fillModelSelect('#layer-planner', models.filter(m => m.kind === 'text'));
     fillModelSelect('#layer-model', models.filter(m => m.kind === 'layer'));
     $('#ai-model-note').textContent = $('#ai-model').value === 'x-ai/grok-imagine-image-2.0' ? 'Grok 2.0：自动使用 1k 分辨率档位，按出图比例设置画幅，不发送 GPT 专属参数。' : models.find(m => m.id === $('#ai-model').value)?.note || '请确认该模型的接口和参考图能力。';
+    if (localMode()) showProvider();
   }
   function updatePeople() {
     const select = $('#ref-person'), previous = select.value;
@@ -156,6 +287,9 @@ export async function setupAI({ poseImage, characters, toast }) {
     if (files.length) { e.preventDefault(); addFiles(files); }
   });
   async function request(args, onText, textOutput) {
+    if (localMode() && args.purpose === 'image') {
+      return await localCall('generate', { prompt: args.prompt, images: args.images, size: args.size, ...localSelection() });
+    }
     if (!bridge?.requestAI) throw new Error('AI 功能需要 Electron 桌面应用，请使用 npm start 启动。');
     $('#ai-error-details').hidden = true;
     const requestId = crypto.randomUUID();
@@ -349,16 +483,17 @@ export async function setupAI({ poseImage, characters, toast }) {
     if (busy) return;
     setBusy(true); status('正在生成，请稍候…');
     try {
-      const model = models.find(m => m.id === $('#ai-model').value);
+      const model = localMode() ? localModel : models.find(m => m.id === $('#ai-model').value);
       if (references.some(reference => reference.kind === 'face')) clearGenerationCache();
       else { $('#ai-request-review').hidden = true; $('#ai-request-preview').replaceChildren(); }
       const { images, labels } = inputReferences();
       const people = structuredClone(characters());
       checkGenerationReferences(model, images);
-      await completeReferencePrompts(images, labels, people);
+      if (!localMode()) await completeReferencePrompts(images, labels, people);
+      else clearGenerationCache();
       const text = ($('#ai-final-prompt').value || $('#ai-prompt').value).trim(); if (!text) throw new Error('请填写提示词。');
       status('提示词已就绪，正在生成图像…');
-      const prompt = `${text}\n${scenePrompt(people)}\n${images.length && autoPrompts.referenceReview?.value ? `【本次参考综合检查】${autoPrompts.referenceReview.value}` : ''}\n${labels}`;
+      const prompt = `${text}\n${scenePrompt(people)}\n${!localMode() && images.length && autoPrompts.referenceReview?.value ? `【本次参考综合检查】${autoPrompts.referenceReview.value}` : ''}\n${labels}`;
       markdown($('#ai-request-preview'), prompt); $('#ai-request-review').hidden = false;
       const result = await request({ model, prompt, images, size: imageSize(), purpose: 'image' });
       await remember(result.images, prompt, model); status('已生成并保存到本地历史。');
@@ -404,6 +539,8 @@ export async function setupAI({ poseImage, characters, toast }) {
   $('#btn-pipeline').onclick = () => optimize(true);
   $('#ai-model').onchange = refreshModels;
 
+  showProvider();
+  if (localMode()) loadLocalCatalog().catch(error => status(error.message));
   // Permanent output canvas and history rail are visible in the main workspace.
   let resultZoom = 1, resultX = 0, resultY = 0, resultDrag = null;
   function transformResult() {
@@ -419,6 +556,7 @@ export async function setupAI({ poseImage, characters, toast }) {
     else $('#studio-image').removeAttribute('src');
     $('#studio-image-meta').textContent = item ? `${item.model} · ${new Date(item.created).toLocaleString('zh-CN')}` : '等待生成';
     ['#studio-copy', '#studio-save', '#studio-edit', '#studio-layers'].forEach(id => { $(id).disabled = !item || busy; });
+    showProvider();
     resultZoom = 1; resultX = resultY = 0; transformResult();
     document.querySelectorAll('.studio-history-card').forEach(button => button.classList.toggle('selected', button.dataset.id === item?.id));
   }
@@ -608,10 +746,11 @@ export async function setupAI({ poseImage, characters, toast }) {
     if (busy || !original) return;
     setBusy(true); status('正在根据涂鸦和修改说明修图…', true);
     try {
-      const model = models.find(m => m.id === $('#edit-model').value);
+      const model = localMode() ? localModel : models.find(m => m.id === $('#edit-model').value);
       const anchors = identityAnchors();
       if (!model?.references || anchors.length + 1 > model.maxReferences) throw new Error('修图模型无法同时接收工作图与全部权威身份图，请更换支持多图的模型。');
       let instruction = $('#edit-prompt').value.trim();
+      if (!instruction && strokes.length && localMode()) throw new Error('本地涂鸦修图请填写修改说明；参考图不会发送云端识别。');
       if (!instruction && strokes.length) {
         const reader = models.find(m => m.id === $('#ai-optimizer').value && m.kind === 'text' && m.references);
         if (!reader) throw new Error('自动识别涂鸦需要支持图像输入的文字模型，也可以手动填写修改说明。');
