@@ -135,7 +135,7 @@ export async function setupAI({ poseImage, characters, toast }) {
     $('#studio-layers').disabled = busy || localMode() || !currentImage;
   }
   $('#ai-provider').value = localStorage.getItem('bodyfactory.provider') || 'zenmux';
-  $('#ai-provider').onchange = () => { localStorage.setItem('bodyfactory.provider', $('#ai-provider').value); showProvider(); if (localMode()) { refreshLocalEngineState(); if (!localCatalog.length) loadLocalCatalog().catch(error => status(error.message)); } };
+  $('#ai-provider').onchange = () => { localStorage.setItem('bodyfactory.provider', $('#ai-provider').value); showProvider(); markPreviousResult('已切换生图服务，尚未生成新图'); if (localMode()) { refreshLocalEngineState(); if (!localCatalog.length) loadLocalCatalog().catch(error => status(error.message)); } };
   $('#local-settings').onclick = () => $('#settings-dialog').showModal();
   for (const key of ['dit', 'encoder']) for (const prefix of ['local-', 'local-download-']) $('#' + prefix + key).onchange = e => { $('#local-' + key).value = $('#local-download-' + key).value = e.target.value; localStorage.setItem('bodyfactory.local-' + key, e.target.value); showLocalCatalog(); };
   $('#settings-dialog').addEventListener('toggle', () => { if ($('#settings-dialog').open && !localCatalog.length) loadLocalCatalog().catch(error => { $('#local-status').textContent = error.message; }); });
@@ -216,7 +216,7 @@ export async function setupAI({ poseImage, characters, toast }) {
   }
   promptState.runs.forEach(addPromptRun); showFinal(); savePrompts();
   $('#ai-final-prompt').oninput = e => {
-    promptState.final = e.target.value; markdown($('#final-prompt-preview'), promptState.final); savePrompts();
+    promptState.scope = localMode() ? 'body' : ''; promptState.final = e.target.value; markdown($('#final-prompt-preview'), promptState.final); savePrompts();
   };
   function status(message, edit = false) {
     $(edit ? '#edit-status' : '#ai-status').textContent = message;
@@ -323,7 +323,7 @@ export async function setupAI({ poseImage, characters, toast }) {
     const clothingConstraint = clothing.length ? `【服饰约束】${clothing.map(reference => `人偶 ${reference.person}`).join('、')}必须穿着对应服饰参考图中的衣服，忠实匹配款式、颜色、材质、长度、领型和细节。服饰参考优先于旧提示词中冲突的衣着描述，不得替换为默认日常服装或人脸照片里的衣服；保持当前姿态，衣物自然随姿态变形。` : '';
     if (!$('#ai-use-pose').checked) return references.length ? clothingConstraint + '参考图中的人脸仅用于对应人物身份，忠实保留脸型、五官、肤色，不混合不同人物面孔；服饰参考只用于对应人物衣着。人物编号仅用于参考图绑定，不在最终图像中显示。' : '';
     for (const reference of references) if (reference.kind !== 'scene' && !people.some(p => p.id === reference.person)) throw new Error(`参考图对应的人偶 ${reference.person} 已被移除，请删除该参考图。`);
-    return `${clothingConstraint}\n【当前姿态强制约束】图片 ${references.filter(reference => reference.kind === 'face').length + 1} 是本次生图的人物姿态与相对位置依据，背景、环境和照明由场景参考与场景提示词决定，优先于后续参考照片和提示词中冲突的动作描述。逐一匹配各人物的头部朝向、躯干倾斜、髋部位置、手臂与手掌位置、腿部弯曲和双脚位置；坐姿必须保持坐姿，不得改为站姿。后续人脸和服饰照片只提取身份或衣着，禁止复制它们的身体动作、站姿、相机视角或构图。画面中必须有 ${people.length} 个人物。人物资料：${JSON.stringify(people)}（height 单位为厘米，weight 单位为公斤）。人偶形态参考图仅用于各人物的姿态、体型比例、相对位置和相机视角，不复制人偶的裸露表面、塑料材质或关节结构。服装以用户提示词和对应服饰参考为准；用户未指定衣着时，人物默认穿着完整日常服装（上衣、长裤和鞋），身体由衣物自然遮盖，不生成裸体或内衣造型。最终人物的真实感或风格以用户提示词为准。人偶编号以形态参考图头部蓝色数字标签为准，最终图像不保留数字标签。人脸参考用于对应人物身份，忠实保留脸型、眼睛、鼻子、嘴唇、肤色和独特五官，不混合不同人物的面孔。服饰参考仅用于对应人物的衣着。`;
+    return `${clothingConstraint}\n【当前姿态强制约束】图片 ${references.filter(reference => reference.kind === 'face').length + 1} 是本次生图的人物姿态与相对位置依据，背景、环境和照明由场景参考与场景提示词决定，优先于后续参考照片和提示词中冲突的动作描述。逐一匹配各人物的头部朝向、躯干倾斜、髋部位置、手臂与手掌位置、腿部弯曲和双脚位置；坐姿必须保持坐姿，不得改为站姿。后续人脸和服饰照片只提取身份或衣着，禁止复制它们的身体动作、站姿、相机视角或构图。画面中必须有 ${people.length} 个人物。人物资料：${JSON.stringify(people)}（height 单位为厘米，weight 单位为公斤）。将姿态参考中的每个人偶转换为自然真人，每个人物只有一具身体和一个头部；禁止输出人偶、模型展示、重复人物、并排对照图或参考图拼贴。人偶形态参考图仅用于各人物的姿态、体型比例、相对位置和相机视角，不复制人偶的裸露表面、塑料材质或关节结构。服装以用户提示词和对应服饰参考为准；用户未指定衣着时，人物默认穿着完整日常服装（上衣、长裤和鞋），身体由衣物自然遮盖，不生成裸体或内衣造型。最终人物的真实感或风格以用户提示词为准。人偶编号以形态参考图头部蓝色数字标签为准，最终图像不保留数字标签。人脸参考用于对应人物身份，忠实保留脸型、眼睛、鼻子、嘴唇、肤色和独特五官，不混合不同人物的面孔。服饰参考仅用于对应人物的衣着。`;
   }
   const sceneStorageKey = 'bodyfactory.scene-lighting';
   let sceneState = { enabled: false, source: '', lighting: '', prompt: '' };
@@ -486,7 +486,7 @@ export async function setupAI({ poseImage, characters, toast }) {
   }
   $('#btn-generate').onclick = async () => {
     if (busy) return;
-    setBusy(true); status('正在生成，请稍候…');
+    setBusy(true); markPreviousResult('本次生成进行中'); status('正在生成，请稍候…');
     try {
       const model = localMode() ? localModel : models.find(m => m.id === $('#ai-model').value);
       if (localMode()) {
@@ -500,13 +500,13 @@ export async function setupAI({ poseImage, characters, toast }) {
       checkGenerationReferences(model, images);
       if (!localMode()) await completeReferencePrompts(images, labels, people);
       else clearGenerationCache();
-      const text = ($('#ai-final-prompt').value || $('#ai-prompt').value).trim(); if (!text) throw new Error('请填写提示词。');
+      const text = (promptState.scope === 'body' ? $('#ai-prompt').value : ($('#ai-final-prompt').value || $('#ai-prompt').value)).trim(); if (!text) throw new Error('请填写提示词。');
       status('提示词已就绪，正在生成图像…');
       const prompt = `${text}\n${localMode() && images.length > 1 ? '将各参考的指定特征整合到同一张自然完整的图像中。每个人物只有一个正常大小的头部与一具身体，服装真实穿在该人物身上；不要叠加参考照片、拼贴、双重曝光、透明人脸、重影或重复人物。' : ''}\n${scenePrompt(people)}\n${!localMode() && images.length && autoPrompts.referenceReview?.value ? `【本次参考综合检查】${autoPrompts.referenceReview.value}` : ''}\n${labels}`;
       markdown($('#ai-request-preview'), prompt); $('#ai-request-review').hidden = false;
       const result = await request({ model, prompt, images, size: imageSize(), purpose: 'image' });
       await remember(result.images, prompt, model); status('已生成并保存到本地历史。');
-    } catch (err) { status(err.message); }
+    } catch (err) { if (!localMode()) markPreviousResult('ZenMux 本次未生成新图'); status(`${localMode() ? '' : 'ZenMux 本次未生成新图：'}${err.message}`); }
     finally { setBusy(false); if (!currentImage) { $('#studio-edit').disabled = $('#studio-layers').disabled = true; } }
   };
   for (const id of ['local-use-face', 'local-use-clothing']) {
@@ -614,6 +614,11 @@ export async function setupAI({ poseImage, characters, toast }) {
     $('#studio-zoom').textContent = `${Math.round(resultZoom * 100)}%`;
   }
   function zoomResult(factor) { resultZoom = Math.max(.2, Math.min(8, resultZoom * factor)); transformResult(); }
+  function markPreviousResult(reason) {
+    $('#studio-image-meta').textContent = currentImage
+      ? `${reason} · 当前显示历史结果：${currentImage.model}${currentImage.stage ? ` · ${currentImage.stage.label}` : ''} · ${new Date(currentImage.created).toLocaleString('zh-CN')}`
+      : `${reason} · 暂无结果`;
+  }
   function selectResult(item) {
     currentImage = item;
     $('#studio-image').hidden = !item;

@@ -159,6 +159,8 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('#btn-generate').click()`);
     await until(`!document.querySelector('#ai-error-details').hidden && !document.querySelector('#btn-generate').disabled`);
     assert.equal(calls.length, beforeFailure + 1);
+    assert.ok(await run(`document.querySelector('#studio-image-meta').textContent.includes('ZenMux 本次未生成新图')`));
+    assert.ok(calls.at(-1).body.prompt.includes('禁止输出人偶'));
     assert.ok(calls.at(-1).url.endsWith('/images/edits'));
     assert.ok(await run(`document.querySelector('#ai-error-diagnostics').textContent.includes('test-request-500')`));
     const diagnostic = fs.readFileSync(path.join(temp, 'zenmux-last-error.json'), 'utf8');
