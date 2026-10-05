@@ -161,6 +161,9 @@ app.whenReady().then(async () => {
     assert.equal(calls.length, beforeFailure + 1);
     assert.ok(await run(`document.querySelector('#studio-image-meta').textContent.includes('ZenMux 本次未生成新图')`));
     assert.ok(calls.at(-1).body.prompt.includes('禁止输出人偶'));
+    assert.ok(calls.at(-1).body.prompt.includes('姿态图没有编号'));
+    assert.ok(calls.at(-1).body.prompt.includes('referencePosition'));
+    assert.ok(calls.at(-1).body.prompt.startsWith('【生成目标】'));
     assert.ok(calls.at(-1).url.endsWith('/images/edits'));
     assert.ok(await run(`document.querySelector('#ai-error-diagnostics').textContent.includes('test-request-500')`));
     const diagnostic = fs.readFileSync(path.join(temp, 'zenmux-last-error.json'), 'utf8');
@@ -264,7 +267,7 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('#ai-prompt').value = ''; document.querySelector('#ai-final-prompt').value = ''; document.querySelector('#btn-generate').click()`);
     await until(`!document.querySelector('#btn-generate').disabled`);
     assert.equal(await run(`document.querySelector('#ai-prompt').value`), 'AUTO_MAIN');
-    assert.ok(calls.at(-1).body.prompt.startsWith('AUTO_MAIN'));
+    assert.ok(calls.at(-1).body.prompt.includes('AUTO_MAIN'));
     failAuto = true;
     const beforeIncomplete = calls.length;
     await run(`document.querySelector('#ai-pose-prompt').value = ''; document.querySelector('#btn-generate').click()`);

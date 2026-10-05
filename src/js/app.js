@@ -833,13 +833,13 @@ window.__bf = { get mannequin() { return mannequin; }, figures, setFigureCount, 
 
 import { setupAI } from './ai.js';
 setupAI({
-  poseImage: () => {
+  poseImage: ({ numbered = true } = {}) => {
     if (state.tween) stepTween(state.tween.t0 + state.tween.duration);
     const { w, h } = parseSize(), padding = Number($('#exp-pad').value);
     const image = art.renderImage(camera, { width: w, height: h, padding });
     const projection = camera.clone(); art.frameCamera(projection, padding, w / h);
     const ctx = image.getContext('2d'), radius = Math.min(w, h) * 0.018;
-    figures.forEach((m, i) => {
+    if (numbered) figures.forEach((m, i) => {
       const point = m.bones.head.getWorldPosition(new THREE.Vector3()).project(projection);
       const x = (point.x + 1) / 2 * w, y = (1 - point.y) / 2 * h;
       ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fillStyle = '#4aa3ff'; ctx.fill();
@@ -847,6 +847,10 @@ setupAI({
     });
     return image.toDataURL('image/png');
   },
-  characters: () => figures.map((m, i) => ({ id: i + 1, gender: m.gender, shape: m.shape, pose: m.getPose(), poseDescription: m.getPose().bones.hipL[0] < -45 && m.getPose().bones.hipR[0] < -45 && m.getPose().bones.kneeL[0] > 45 && m.getPose().bones.kneeR[0] > 45 ? '双腿髋部前屈、双膝弯曲，保持参考图的坐姿或蹲姿，不可站直。' : '严格保持参考图中的躯干朝向、四肢位置与弯曲程度。' })),
+  characters: () => figures.map((m, i) => {
+    const { w, h } = parseSize();
+    const projection = camera.clone(); art.frameCamera(projection, Number($('#exp-pad').value), w / h);
+    const point = m.bones.head.getWorldPosition(new THREE.Vector3()).project(projection);
+    return { id: i + 1, referencePosition: { headX: Number(((point.x + 1) / 2).toFixed(3)), headY: Number(((1 - point.y) / 2).toFixed(3)) }, gender: m.gender, shape: m.shape, pose: m.getPose(), poseDescription: m.getPose().bones.hipL[0] < -45 && m.getPose().bones.hipR[0] < -45 && m.getPose().bones.kneeL[0] > 45 && m.getPose().bones.kneeR[0] > 45 ? '双腿髋部前屈、双膝弯曲，保持参考图的坐姿或蹲姿，不可站直。' : '严格保持参考图中的躯干朝向、四肢位置与弯曲程度。' }; }),
   toast,
 });

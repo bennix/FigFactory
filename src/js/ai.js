@@ -323,7 +323,7 @@ export async function setupAI({ poseImage, characters, toast }) {
     const clothingConstraint = clothing.length ? `【服饰约束】${clothing.map(reference => `人偶 ${reference.person}`).join('、')}必须穿着对应服饰参考图中的衣服，忠实匹配款式、颜色、材质、长度、领型和细节。服饰参考优先于旧提示词中冲突的衣着描述，不得替换为默认日常服装或人脸照片里的衣服；保持当前姿态，衣物自然随姿态变形。` : '';
     if (!$('#ai-use-pose').checked) return references.length ? clothingConstraint + '参考图中的人脸仅用于对应人物身份，忠实保留脸型、五官、肤色，不混合不同人物面孔；服饰参考只用于对应人物衣着。人物编号仅用于参考图绑定，不在最终图像中显示。' : '';
     for (const reference of references) if (reference.kind !== 'scene' && !people.some(p => p.id === reference.person)) throw new Error(`参考图对应的人偶 ${reference.person} 已被移除，请删除该参考图。`);
-    return `${clothingConstraint}\n【当前姿态强制约束】图片 ${references.filter(reference => reference.kind === 'face').length + 1} 是本次生图的人物姿态与相对位置依据，背景、环境和照明由场景参考与场景提示词决定，优先于后续参考照片和提示词中冲突的动作描述。逐一匹配各人物的头部朝向、躯干倾斜、髋部位置、手臂与手掌位置、腿部弯曲和双脚位置；坐姿必须保持坐姿，不得改为站姿。后续人脸和服饰照片只提取身份或衣着，禁止复制它们的身体动作、站姿、相机视角或构图。画面中必须有 ${people.length} 个人物。人物资料：${JSON.stringify(people)}（height 单位为厘米，weight 单位为公斤）。将姿态参考中的每个人偶转换为自然真人，每个人物只有一具身体和一个头部；禁止输出人偶、模型展示、重复人物、并排对照图或参考图拼贴。人偶形态参考图仅用于各人物的姿态、体型比例、相对位置和相机视角，不复制人偶的裸露表面、塑料材质或关节结构。服装以用户提示词和对应服饰参考为准；用户未指定衣着时，人物默认穿着完整日常服装（上衣、长裤和鞋），身体由衣物自然遮盖，不生成裸体或内衣造型。最终人物的真实感或风格以用户提示词为准。人偶编号以形态参考图头部蓝色数字标签为准，最终图像不保留数字标签。人脸参考用于对应人物身份，忠实保留脸型、眼睛、鼻子、嘴唇、肤色和独特五官，不混合不同人物的面孔。服饰参考仅用于对应人物的衣着。`;
+    return `${clothingConstraint}\n【当前姿态强制约束】图片 ${references.filter(reference => reference.kind === 'face').length + 1} 是本次生图的人物姿态与相对位置依据，背景、环境和照明由场景参考与场景提示词决定，优先于后续参考照片和提示词中冲突的动作描述。逐一匹配各人物的头部朝向、躯干倾斜、髋部位置、手臂与手掌位置、腿部弯曲和双脚位置；坐姿必须保持坐姿，不得改为站姿。后续人脸和服饰照片只提取身份或衣着，禁止复制它们的身体动作、站姿、相机视角或构图。画面中必须有 ${people.length} 个人物。人物资料：${JSON.stringify(people)}（height 单位为厘米，weight 单位为公斤）。将姿态参考中的每个人偶转换为自然真人，每个人物只有一具身体和一个头部；禁止输出人偶、模型展示、重复人物、并排对照图或参考图拼贴。人偶形态参考图仅用于各人物的姿态、体型比例、相对位置和相机视角，不复制人偶的裸露表面、塑料材质或关节结构。服装以用户提示词和对应服饰参考为准；用户未指定衣着时，人物默认穿着完整日常服装（上衣、长裤和鞋），身体由衣物自然遮盖，不生成裸体或内衣造型。最终人物的真实感或风格以用户提示词为准。人物编号仅为文字绑定标识。姿态图没有编号；按人物资料 referencePosition 的头部坐标绑定参考（左上角为 0,0，右下角为 1,1），不得在输出中绘制数字、标签或文字。人脸参考用于对应人物身份，忠实保留脸型、眼睛、鼻子、嘴唇、肤色和独特五官，不混合不同人物的面孔。服饰参考仅用于对应人物的衣着。`;
   }
   const sceneStorageKey = 'bodyfactory.scene-lighting';
   let sceneState = { enabled: false, source: '', lighting: '', prompt: '' };
@@ -390,7 +390,7 @@ export async function setupAI({ poseImage, characters, toast }) {
     for (const reference of anchors) {
       images.push(reference.url); labels.push(`图片 ${images.length}：人偶 ${reference.person} 的人脸身份锚点，唯一权威身份图。借用脸型、五官、发际线、发型、肤色、年龄和标志特征；这些不可改变。不借服装、姿态、背景和打光。`);
     }
-    if ($('#ai-use-pose').checked) { images.push(poseImage()); labels.push(`图片 ${images.length}：当前人偶姿态图，本次重新捕获，唯一姿态依据；只借姿态、体型比例和人物相对位置，忽略截图背景、地面网格、灯光及人偶材质。`); }
+    if ($('#ai-use-pose').checked) { images.push(poseImage({ numbered: localMode() })); labels.push(`图片 ${images.length}：当前人偶姿态图，本次重新捕获，唯一姿态依据；只借姿态、体型比例和人物相对位置，忽略截图背景、地面网格、灯光及人偶材质。`); }
     for (const reference of references) {
       if (reference.kind === 'face') continue;
       if (reference.kind === 'clothing' && localMode() && !$('#local-use-clothing').checked) continue;
@@ -502,7 +502,7 @@ export async function setupAI({ poseImage, characters, toast }) {
       else clearGenerationCache();
       const text = (promptState.scope === 'body' ? $('#ai-prompt').value : ($('#ai-final-prompt').value || $('#ai-prompt').value)).trim(); if (!text) throw new Error('请填写提示词。');
       status('提示词已就绪，正在生成图像…');
-      const prompt = `${text}\n${localMode() && images.length > 1 ? '将各参考的指定特征整合到同一张自然完整的图像中。每个人物只有一个正常大小的头部与一具身体，服装真实穿在该人物身上；不要叠加参考照片、拼贴、双重曝光、透明人脸、重影或重复人物。' : ''}\n${scenePrompt(people)}\n${!localMode() && images.length && autoPrompts.referenceReview?.value ? `【本次参考综合检查】${autoPrompts.referenceReview.value}` : ''}\n${labels}`;
+      const prompt = `${$('#ai-use-pose').checked ? '【生成目标】生成一张自然真人图像。输入的三维人偶是姿态控制草图，不是待保留的主体；必须替换为有自然面孔、皮肤、头发和服装的真人。仅保留姿态、体型比例、人数和相对位置。不得复刻塑料人偶、关节球、编号、网格或参考图展示布局。\n' : ''}${text}\n${localMode() && images.length > 1 ? '将各参考的指定特征整合到同一张自然完整的图像中。每个人物只有一个正常大小的头部与一具身体，服装真实穿在该人物身上；不要叠加参考照片、拼贴、双重曝光、透明人脸、重影或重复人物。' : ''}\n${scenePrompt(people)}\n${!localMode() && images.length && autoPrompts.referenceReview?.value ? `【本次参考综合检查】${autoPrompts.referenceReview.value}` : ''}\n${labels}`;
       markdown($('#ai-request-preview'), prompt); $('#ai-request-review').hidden = false;
       const result = await request({ model, prompt, images, size: imageSize(), purpose: 'image' });
       await remember(result.images, prompt, model); status('已生成并保存到本地历史。');
