@@ -55,7 +55,7 @@ app.whenReady().then(async () => {
     result.checks.push({ step: 'restart-and-idle-stop', processExited: true, portClosed: true, switchesOff: true });
     result.status = 'passed';
     console.log('PASS real startup, manual stop, restart, idle shutdown and synchronized application switches');
-  } catch (error) { result.status = 'failed'; result.error = error.stack; console.error(error); process.exitCode = 1; }
+  } catch (error) { result.status = 'failed'; result.error = error.stack; console.error(error); console.error('Engine status:', engine?.status(), 'Engine log:', engine?.logs?.slice(-2500)); process.exitCode = 1; }
   finally {
     engine?.stop();
     const output = path.join(source, 'local-smoke', 'lifecycle-result.json');

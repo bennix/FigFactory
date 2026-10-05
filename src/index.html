@@ -188,12 +188,20 @@
       <section class="card accent" id="sec-ai">
         <header><h2>生图设置</h2><button class="link" id="btn-history">历史管理</button></header>
         <label class="ai-field">生图服务<select id="ai-provider"><option value="zenmux">ZenMux 云端</option><option value="local">本地 Qwen-Image-2.1 Turbo · 4 步</option></select></label>
-        <div id="local-controls" hidden><label class="ai-field">主模型<select id="local-dit"></select></label><label class="ai-field">文本编码器<select id="local-encoder"></select></label><p id="local-readiness" class="ai-note" role="status">本地 AI：正在检查运行环境与权重…</p><label class="switch"><input type="checkbox" id="local-service-toggle" /><span></span>本地 AI 生图服务</label><p class="ai-note" id="local-engine-state" role="status">本地生图服务：尚未启动</p><div class="row2"><button class="ghost" id="local-settings">本地引擎与权重设置</button><button class="ghost" id="local-stop-now" disabled>立即关闭本地服务</button></div><p class="ai-note">Apple Silicon + Q4_K_M + Heretic W4A8 已验证；首次使用请在设置中下载所需权重。生图服务生成时按需启动，空闲 2 分钟自动关闭。提示词优化走 ZenMux，点击优化会提交文字及所选参考图。</p></div>
+        <div id="local-controls" hidden><label class="ai-field">主模型<select id="local-dit"></select></label><label class="ai-field">文本编码器<select id="local-encoder"></select></label><p id="local-readiness" class="ai-note" role="status">本地 AI：正在检查运行环境与权重…</p><label class="switch"><input type="checkbox" id="local-service-toggle" /><span></span>本地 AI 生图服务</label><p class="ai-note" id="local-engine-state" role="status">本地生图服务：尚未启动</p><div class="row2"><button class="ghost" id="local-settings">本地引擎与权重设置</button><button class="ghost" id="local-stop-now" disabled>立即关闭本地服务</button></div><p class="ai-note">Apple Silicon + Q4_K_M + Heretic W4A8 已验证；首次使用请在设置中下载所需权重。生图服务生成时按需启动，空闲 2 分钟自动关闭。本地模式的形体提示词优化走 ZenMux，只提交原始需求与已启用的姿态图；服饰、场景、人脸参考分别用于后续本地编辑。</p></div>
         <label class="ai-field">生图模型<select id="ai-model"></select></label>
         <p class="ai-note" id="ai-model-note"></p>
         <label class="ai-field">原始提示词<textarea id="ai-prompt" rows="4" placeholder="描述人物、服装、场景与画风…"></textarea></label>
         <label class="ai-field">提示词优化 · ZenMux<select id="ai-optimizer"></select></label>
+        <section id="local-stage-controls" hidden>
+          <p class="ai-note">本地分步生成：形体 → 换衣服 → 换场景 → 最后换脸。没有对应参考图时跳过该步骤；形体参考和场景参考由各自开关控制。</p>
+          <label class="switch"><input type="checkbox" id="local-use-clothing" checked /><span></span>换衣服（有服饰参考时执行）</label>
+          <label class="switch"><input type="checkbox" id="local-use-face" checked /><span></span>最后换脸（有人脸参考时执行）</label>
+          <ol id="local-stage-progress" class="ai-note" aria-live="polite"></ol>
+          <p class="ai-note">每步结果保存到历史；下一步以前一步结果为底图。步骤失败时停止，并保留已完成结果。</p>
+        </section>
         <div class="row2"><button class="ghost small" id="btn-optimize">优化提示词</button><button class="ghost small" id="btn-pipeline">三模型协作优化</button></div>
+        <p id="prompt-optimization-status" class="ai-note" role="status" aria-live="polite">优化通过 ZenMux；完成后生成会使用最终提示词。</p>
         <details id="prompt-process" hidden><summary>提示词优化过程</summary><div id="prompt-runs"></div></details>
         <section id="final-prompt-section" hidden>
           <label class="ai-field">最终提示词<textarea id="ai-final-prompt" rows="5" placeholder="优化后的最终提示词，可继续编辑…"></textarea></label>

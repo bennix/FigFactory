@@ -124,7 +124,7 @@ app.whenReady().then(async () => {
     await run(`document.querySelector('#image-dialog').close(); document.querySelector('#btn-history').click()`);
     await until(`document.querySelectorAll('.history-card').length === 2`);
     await run(`document.querySelector('#history-dialog').close(); window.__streamUpdates = []; window.__stopStream = window.bodyFactory.onAIText(data => window.__streamUpdates.push(data.text)); document.querySelector('#btn-pipeline').click()`);
-    await until(`document.querySelector('#ai-status').textContent.includes('提示词已优化')`);
+    await until(`document.querySelector('#ai-status').textContent.includes('优化完成')`);
     assert.ok(await run(`window.__streamUpdates.length >= 6 && window.__streamUpdates.some(text => text.length === 3)`));
     await run(`window.__stopStream()`);
     assert.ok(await run(`document.querySelectorAll('.prompt-stage').length === 3 && [...document.querySelectorAll('.prompt-stage')].every(el => el.querySelector('h2') && el.querySelector('strong') && !el.querySelector('[onerror]'))`));
@@ -189,7 +189,7 @@ app.whenReady().then(async () => {
     await until('!!window.__bf && document.querySelector("#ai-model").options.length === 6');
     assert.equal(await run(`document.querySelector('#ai-use-pose').checked`), true);
     await run(`document.querySelector('#ai-prompt').value = '穿着参考风衣'; document.querySelector('#btn-optimize').click()`);
-    assert.ok(await run(`document.querySelectorAll('.prompt-stage').length === 1 && document.querySelector('#ai-final-prompt').value === '' && JSON.parse(localStorage.getItem('bodyfactory.prompt-optimization')).runs.length === 1`));
+    assert.ok(await run(`document.querySelectorAll('.prompt-stage').length === 1 && document.querySelector('#ai-final-prompt').value.length > 0 && JSON.parse(localStorage.getItem('bodyfactory.prompt-optimization')).runs.length === 1`));
     await until(`!document.querySelector('#btn-optimize').disabled`);
     await run(`{ const transfer = new DataTransfer(); const canvas = document.createElement('canvas'); canvas.width = canvas.height = 2; canvas.getContext('2d').fillRect(0,0,2,2); const data = Uint8Array.from(atob(canvas.toDataURL().split(',')[1]), c => c.charCodeAt(0)); transfer.items.add(new File([data], 'coat.png', {type:'image/png'})); document.querySelector('#ref-file').files = transfer.files; document.querySelector('#ref-file').dispatchEvent(new Event('change')); }`);
     await until(`document.querySelectorAll('.ref-kind-select').length === 1`);
