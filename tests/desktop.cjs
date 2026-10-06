@@ -90,11 +90,12 @@ app.whenReady().then(async () => {
     assert.ok(await run(`window.__bf.mannequin.group.scale.x > ${previousWidth}`));
     await run(`document.querySelector('#btn-undo').click()`);
     assert.equal(await run(`window.__bf.mannequin.shape.weight`), 90);
-    await run(`window.__bf.setFigureCount(2); document.querySelector('#btn-back-studio').click(); document.querySelector('#btn-settings').click(); document.querySelector('#ui-theme').value = 'light'; document.querySelector('#ui-theme').dispatchEvent(new Event('change')); document.querySelector('#api-key').value = 'desktop-test-key'; document.querySelector('#btn-save-ai').click();`);
+    await run(`window.__bf.setFigureCount(2); document.querySelector('#btn-back-studio').click(); document.querySelector('#btn-settings').click(); document.querySelector('#ui-theme').value = 'light'; document.querySelector('#ui-theme').dispatchEvent(new Event('change')); document.querySelector('#api-key').value = 'desktop-test-key'; document.querySelector('#civitai-api-key').value = 'civitai-desktop-test-key'; document.querySelector('#btn-save-ai').click();`);
     if (!safeStorage.isEncryptionAvailable()) throw new Error('OS secure storage unavailable');
     await until(`!document.querySelector('#settings-dialog').open`);
     const saved = fs.readFileSync(path.join(temp, 'zenmux-settings.json'), 'utf8');
-    assert.ok(!saved.includes('desktop-test-key')); assert.ok(JSON.parse(saved).encryptedKey);
+    assert.ok(!saved.includes('desktop-test-key')); assert.ok(!saved.includes('civitai-desktop-test-key')); assert.ok(JSON.parse(saved).encryptedKey); assert.ok(JSON.parse(saved).encryptedCivitaiKey);
+    assert.equal(await run(`window.bodyFactory.loadAISettings().then(s => s.hasCivitaiKey && !('civitaiApiKey' in s))`), true);
     const legacy = JSON.parse(saved);
     legacy.models.find(m => m.id === 'inclusionai/ming-image-0.1-design-layer').protocol = 'vertex-predict';
     fs.writeFileSync(path.join(temp, 'zenmux-settings.json'), JSON.stringify(legacy));

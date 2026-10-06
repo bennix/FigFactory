@@ -1,7 +1,7 @@
 {
   "name": "body-factory",
   "productName": "BodyFactory 形体工坊",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "description": "AI image creation studio with pose references, image editing and layered PSD export",
   "main": "main.js",
   "scripts": {

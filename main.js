@@ -29,8 +29,14 @@ ipcMain.handle('local-ai', async (event, { action, ...args }) => {
     let result;
     switch (action) {
       case 'status': result = engine.status(); break;
-      case 'catalog': result = await weights.catalog(args.refresh); break;
-      case 'download': if (engine.bundled) throw new Error('此离线版已内置并校验 Turbo 权重，不能修改应用包内文件。'); result = await weights.download(args.dit, args.encoder, progress, args.mirror); break;
+      case 'catalog': result = await weights.catalog(args.refresh, args.mirror !== false); break;
+      case 'download': {
+        if (engine.bundled) throw new Error('此离线版已内置并校验 Turbo 权重，不能修改应用包内文件。');
+        const settings = readAISettings();
+        const civitaiToken = settings.encryptedCivitaiKey ? safeStorage.decryptString(Buffer.from(settings.encryptedCivitaiKey, 'base64')) : '';
+        result = await weights.download(args.dit, args.encoder, progress, args.mirror, civitaiToken);
+        break;
+      }
       case 'cancel-download': weights.cancel(); break;
       case 'install': result = await engine.install(progress, args.mirror); break;
       case 'start': result = await engine.start(progress); break;
@@ -62,7 +68,7 @@ function createWindow() {
     },
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url === 'https://zenmux.ai/invite/GBQMC5') shell.openExternal(url);
+    if (url === 'https://zenmux.ai/invite/GBQMC5' || url === 'https://civitai.com/user/account' || url === 'https://civitai.com/models/2958896') shell.openExternal(url);
     return { action: 'deny' };
   });
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
@@ -123,18 +129,23 @@ function readAISettings() {
   }
   catch (err) { if (err.code === 'ENOENT') return {}; throw err; }
 }
-function publicSettings(data) { return { models: data.models, hasKey: !!data.encryptedKey, secureStorage: safeStorage.isEncryptionAvailable() }; }
+function publicSettings(data) { return { models: data.models, hasKey: !!data.encryptedKey, hasCivitaiKey: !!data.encryptedCivitaiKey, secureStorage: safeStorage.isEncryptionAvailable() }; }
 ipcMain.handle('ai-settings-load', () => {
   try { return { ok: true, ...publicSettings(readAISettings()) }; }
   catch { return { ok: false, error: '无法读取本地 AI 设置。' }; }
 });
-ipcMain.handle('ai-settings-save', (event, { models, apiKey, clearKey }) => {
+ipcMain.handle('ai-settings-save', (event, { models, apiKey, clearKey, civitaiApiKey, clearCivitaiKey }) => {
   try {
     const data = readAISettings();
     if (clearKey) delete data.encryptedKey;
+    if (clearCivitaiKey) delete data.encryptedCivitaiKey;
     if (apiKey) {
       if (!safeStorage.isEncryptionAvailable()) throw new Error('系统加密服务不可用，无法安全保存 Key。');
       data.encryptedKey = safeStorage.encryptString(apiKey.trim()).toString('base64');
+    }
+    if (civitaiApiKey) {
+      if (!safeStorage.isEncryptionAvailable()) throw new Error('系统加密服务不可用，无法安全保存 Civitai API Key。');
+      data.encryptedCivitaiKey = safeStorage.encryptString(civitaiApiKey.trim()).toString('base64');
     }
     if (models) data.models = models;
     const filename = settingsPath();

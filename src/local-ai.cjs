@@ -6,7 +6,8 @@ const crypto = require('node:crypto');
 const { execFile, spawn } = require('node:child_process');
 const { promisify } = require('node:util');
 const { parseImage } = require('./zenmux.cjs');
-const { selection, hashFile } = require('./local-weights.cjs');
+const { selection, hashFile, SAFETENSORS_ENCODERS, profileOf, samplerOf } = require('./local-weights.cjs');
+const NOCT_NEGATIVE = 'artifacts, gpt-image, washed-out colors, low quality, low resolution, AI slop, deviantart, sloppy lines, rough sketch, blurry, indistinct, missing fingers, badly drawn hands, wrong number of fingers';
 const run = promisify(execFile);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const PYTHON = process.platform === 'win32' ? ['Scripts', 'python.exe'] : ['bin', 'python'];
@@ -152,17 +153,19 @@ class LocalEngine {
     if (!prompt?.trim()) throw new Error('请填写本地生图提示词。');
     if (images.length > 16) throw new Error('本地 Qwen 2.1 最多接收 16 张参考图。');
     const catalog = await this.weights.catalog();
+    const noct = profileOf(dit) === 'noct';
     const parts = selection(dit, encoder).map(id => catalog.find(item => item.id === id));
-    if (!parts[0].runnable) throw new Error('MLX 权重当前支持预下载；托管 ComfyUI 引擎请使用 GGUF 主模型。');
-    if (parts.some(item => !this.weights.verified(item))) throw new Error('所选主模型、编码器、视觉投影、4 步 Turbo LoRA 或 VAE 尚未全部下载并校验。');
+    if (!parts[0]?.runnable) throw new Error(noct ? '所选 Noct-Q 主模型当前不能用于托管引擎。' : 'MLX 权重当前支持预下载；托管 ComfyUI 引擎请使用 GGUF 主模型。');
+    if (parts.some(item => !item || !this.weights.verified(item))) throw new Error(noct ? '所选 Noct-Q 主模型、文本编码器或 VAE 尚未全部下载并校验。' : '所选主模型、编码器、视觉投影、4 步 Turbo LoRA 或 VAE 尚未全部下载并校验。');
     await this.start(progress);
     const info = await this.json(this.url('/object_info'));
-    const clipLoader = ['te-bf16', 'te-w4a8'].includes(encoder) ? 'CLIPLoader' : 'CLIPLoaderGGUF';
-    const nodes = ['UnetLoaderGGUF', clipLoader, 'VAELoader', 'TextEncodeQwenImage21', 'KSampler', 'EmptyLatentImage', 'VAEDecode', 'SaveImage', 'LoraLoaderModelOnly', ...(images.length ? ['LoadImage'] : [])];
-    if (nodes.some(node => !info[node])) throw new Error('本地引擎缺少 Qwen 2.1 或 GGUF 节点，请重新安装引擎。');
-    const names = { dit: path.basename(parts[0].file), encoder: path.basename(parts[1].file), vae: path.basename(parts.at(-1).file), lora: path.basename(parts.find(item => item.id === 'turbo-lora').file) };
-    if (!info.LoraLoaderModelOnly.input.required.lora_name[0].includes(names.lora)) throw new Error('引擎尚未识别 Turbo LoRA，请停止后重新启动引擎。');
-    if (!info.UnetLoaderGGUF.input.required.unet_name[0].includes(names.dit) || !info[nodes[1]].input.required.clip_name[0].includes(names.encoder) || !info.VAELoader.input.required.vae_name[0].includes(names.vae)) throw new Error('引擎尚未识别所选权重，请停止后重新启动本地引擎。');
+    const clipLoader = SAFETENSORS_ENCODERS.includes(encoder) ? 'CLIPLoader' : 'CLIPLoaderGGUF';
+    const unetLoader = noct ? 'UNETLoader' : 'UnetLoaderGGUF';
+    const nodes = [unetLoader, clipLoader, 'VAELoader', 'TextEncodeQwenImage21', 'KSampler', 'EmptyLatentImage', 'VAEDecode', 'SaveImage', ...(noct ? [] : ['LoraLoaderModelOnly']), ...(images.length ? ['LoadImage'] : [])];
+    if (nodes.some(node => !info[node])) throw new Error(noct ? '本地引擎缺少 Qwen 2.1 的 UNETLoader 节点。Noct-Q int8 需要较新的 ComfyUI，请重新安装引擎。' : '本地引擎缺少 Qwen 2.1 或 GGUF 节点，请重新安装引擎。');
+    const names = { dit: path.basename(parts[0].file), encoder: path.basename(parts[1].file), vae: path.basename(parts.at(-1).file), lora: noct ? '' : path.basename(parts.find(item => item.id === 'turbo-lora').file) };
+    if (!noct && !info.LoraLoaderModelOnly.input.required.lora_name[0].includes(names.lora)) throw new Error('引擎尚未识别 Turbo LoRA，请停止后重新启动引擎。');
+    if (!info[unetLoader].input.required.unet_name[0].includes(names.dit) || !info[clipLoader].input.required.clip_name[0].includes(names.encoder) || !info.VAELoader.input.required.vae_name[0].includes(names.vae)) throw new Error('引擎尚未识别所选权重，请停止后重新启动本地引擎。');
     const uploaded = [];
     for (const image of images) {
       const { mimeType, bytesBase64Encoded } = parseImage(image), form = new FormData();
@@ -170,7 +173,8 @@ class LocalEngine {
       const result = await this.json(this.url('/upload/image'), { method: 'POST', body: form });
       uploaded.push((result.subfolder ? result.subfolder + '/' : '') + result.name);
     }
-    const workflow = buildWorkflow({ prompt, size, names, encoder, uploaded });
+    const sample = samplerOf(dit);
+    const workflow = buildWorkflow({ prompt, size, names, encoder, uploaded, profile: noct ? 'noct' : 'turbo', steps: sample.steps, cfg: sample.cfg });
     const queued = await this.json(this.url('/prompt'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: workflow, client_id: crypto.randomUUID() }) });
     if (!queued.prompt_id || Object.keys(queued.node_errors || {}).length) throw new Error('本地工作流校验失败，请检查模型与节点。');
     progress({ message: '本地采样中，首次加载权重可能较慢…' });
@@ -193,21 +197,27 @@ class LocalEngine {
     throw new Error('本地生成超时。');
   }
 }
-function buildWorkflow({ prompt, size, names, encoder, uploaded }) {
-  if (!names.lora) throw new Error('4 步生图必须加载指定的 Turbo LoRA。');
+function buildWorkflow({ prompt, size, names, encoder, uploaded, profile = names.lora ? 'turbo' : 'noct', steps, cfg }) {
+  const noct = profile === 'noct';
+  if (!noct && !names.lora) throw new Error('4 步生图必须加载指定的 Turbo LoRA。');
   const [width, height] = size.split('x').map(Number);
   if (![1024, 1536].includes(width) || ![1024, 1536].includes(height)) throw new Error('不支持的本地出图尺寸。');
+  const sampleSteps = steps ?? (noct ? 6 : 4), sampleCfg = cfg ?? 1;
+  const text = { clip: ['2', 0], prompt, negative_prompt: noct && sampleCfg !== 1 ? NOCT_NEGATIVE : '', resolution: 1024 };
+  if (!noct || uploaded.length) text.vae = ['3', 0];
   const workflow = {
-    '1': { class_type: 'UnetLoaderGGUF', inputs: { unet_name: names.dit } },
-    '2': { class_type: ['te-bf16', 'te-w4a8'].includes(encoder) ? 'CLIPLoader' : 'CLIPLoaderGGUF', inputs: { clip_name: names.encoder, type: 'qwen_image' } },
+    '1': noct
+      ? { class_type: 'UNETLoader', inputs: { unet_name: names.dit, weight_dtype: 'default' } }
+      : { class_type: 'UnetLoaderGGUF', inputs: { unet_name: names.dit } },
+    '2': { class_type: SAFETENSORS_ENCODERS.includes(encoder) ? 'CLIPLoader' : 'CLIPLoaderGGUF', inputs: { clip_name: names.encoder, type: 'qwen_image' } },
     '3': { class_type: 'VAELoader', inputs: { vae_name: names.vae } },
-    '4': { class_type: 'TextEncodeQwenImage21', inputs: { clip: ['2', 0], prompt, negative_prompt: '', vae: ['3', 0], resolution: 1024 } },
+    '4': { class_type: 'TextEncodeQwenImage21', inputs: text },
     '5': { class_type: 'EmptyLatentImage', inputs: { width, height, batch_size: 1 } },
-    '6': { class_type: 'KSampler', inputs: { model: ['9', 0], positive: ['4', 0], negative: ['4', 1], latent_image: uploaded.length ? ['4', 2] : ['5', 0], seed: crypto.randomInt(0, 2 ** 48 - 1), steps: 4, cfg: 1, sampler_name: 'euler', scheduler: 'simple', denoise: 1 } },
+    '6': { class_type: 'KSampler', inputs: { model: noct ? ['1', 0] : ['9', 0], positive: ['4', 0], negative: ['4', 1], latent_image: uploaded.length ? ['4', 2] : ['5', 0], seed: crypto.randomInt(0, 2 ** 48 - 1), steps: sampleSteps, cfg: sampleCfg, sampler_name: 'euler', scheduler: 'simple', denoise: 1 } },
     '7': { class_type: 'VAEDecode', inputs: { samples: ['6', 0], vae: ['3', 0] } },
-    '9': { class_type: 'LoraLoaderModelOnly', inputs: { model: ['1', 0], lora_name: names.lora, strength_model: 1 } },
-    '8': { class_type: 'SaveImage', inputs: { images: ['7', 0], filename_prefix: 'FigFactory' } },
+    '8': { class_type: 'SaveImage', inputs: { images: ['7', 0], filename_prefix: noct ? 'NoctQ' : 'FigFactory' } },
   };
+  if (!noct) workflow['9'] = { class_type: 'LoraLoaderModelOnly', inputs: { model: ['1', 0], lora_name: names.lora, strength_model: 1 } };
   uploaded.forEach((image, index) => { const id = String(100 + index); workflow[id] = { class_type: 'LoadImage', inputs: { image } }; workflow['4'].inputs[`images.image_${index + 1}`] = [id, 0]; });
   return workflow;
 }
