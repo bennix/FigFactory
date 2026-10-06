@@ -3,9 +3,10 @@
 export function buildLocalStages({ text, bodyText = text, people, poseImage, posePrompt = '', references = [], face = true, clothing = true, scene = false, clothingPrompt = '', scenePrompt = '', identity = '' }) {
   const count = people.length || 1;
   const countConstraint = `Exactly ${count} ${count === 1 ? 'person' : 'people'} in one continuous image. No duplicates, comparison panels, multiple views or side-by-side copies. 画面必须恰好有 ${count} 个人物，只生成一个完整场景；禁止重复人物、分栏、三联画、前后对比或同一人物多个视角。`;
+  const mannequinConstraint = `【真人摄影强制约束】姿态参考是无性别或具象的人体人偶，只作为三维姿态控制草图。必须将其转换为一位自然、完整、有真实皮肤和头发的真人${count === 1 ? '模特' : '人物'}；不保留人偶本身。只生成正面或单一自然视角的一张照片，不得生成三视图、转面图、角色设定表、多姿势展示或多个副本。人体应有自然解剖结构、真实皮肤质感、自然面部和头发，不能是塑料/蜡像/橡胶材质、无面孔假人或 3D 渲染。只保留人偶所表达的姿态、体型比例、人物数量和相对位置；头部和四肢不得复制人偶的僵硬造型。未指定服饰时，为人物穿着合身、完整、不暴露的日常服装。`;
   const stages = [{
     kind: 'body', label: '生成形体', reference: poseImage || null,
-    prompt: `${countConstraint}\n${bodyText}\n【第 1 步：生成形体】${poseImage ? '图片 1（<image1>） 是当前姿态与体型参考，只采用人物姿态、体型比例、相对位置及构图，不复制网格、数字、塑料材质或背景。' : '按用户文字生成形体与构图。'}\n人物资料：${JSON.stringify(people)}。${posePrompt}\n先生成完整、自然的人物基础图。未指定衣着时穿完整日常服装。${countConstraint}`,
+    prompt: `${mannequinConstraint}\n${countConstraint}\n${bodyText}\n【第 1 步：生成形体】${poseImage ? '图片 1（<image1>）是当前姿态与体型参考。把其中每个人偶替换为自然真人，只保留姿态、体型比例、相对位置与单一相机视角。忽略并丢弃人偶的脸、光头、肤色、裸露身体、材质和展示形式；不得输出三视图或多个角度。' : '按用户文字生成真人形体与构图。'}\n人物资料：${JSON.stringify(people)}。${posePrompt}\n${countConstraint}`,
   }];
   const preserve = `${countConstraint} 图片 1（<image1>） 是上一步生成的工作图，也是本步唯一构图基础。直接修改图片 1（<image1>），不叠加、拼贴或透明覆盖照片，不添加或重复人物。保持人数、体型比例、身体姿态、机位、画幅及未要求修改的内容。`;
   for (const kind of ['clothing', 'scene', 'face']) {

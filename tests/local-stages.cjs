@@ -43,3 +43,11 @@ test('body uses isolated text and exact figure count rather than multi-reference
   const multi = buildLocalStages({ text: 'group', people: [{ id: 1 }, { id: 2 }], references: refs });
   assert.ok(multi.every(step => step.prompt.includes('Exactly 2 people')));
 });
+test('body stage turns mannequin pose references into one photorealistic person, not a turnaround sheet', async () => {
+  const { buildLocalStages } = await load();
+  const [body] = buildLocalStages({ text: '一个穿着蓝色长裙的女人', people: [{ id: 1 }], poseImage: 'mannequin-pose' });
+  assert.ok(body.prompt.includes('必须将其转换为一位自然、完整') && body.prompt.includes('真实皮肤质感'));
+  assert.ok(body.prompt.includes('不得生成三视图、转面图') && body.prompt.includes('不得输出三视图或多个角度'));
+  assert.ok(body.prompt.includes('丢弃人偶的脸、光头、肤色、裸露身体'));
+  assert.ok(body.prompt.includes('Exactly 1 person') && body.prompt.includes('禁止重复人物'));
+});
