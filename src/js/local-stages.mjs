@@ -3,7 +3,7 @@
 export function buildLocalStages({ text, bodyText = text, people, poseImage, posePrompt = '', references = [], face = true, clothing = true, scene = false, clothingPrompt = '', scenePrompt = '', identity = '' }) {
   const count = people.length || 1;
   const countConstraint = `Exactly ${count} ${count === 1 ? 'person' : 'people'} in one continuous image. No duplicates, comparison panels, multiple views or side-by-side copies. 画面必须恰好有 ${count} 个人物，只生成一个完整场景；禁止重复人物、分栏、三联画、前后对比或同一人物多个视角。`;
-  const mannequinConstraint = `【真人摄影强制约束】姿态参考是无性别或具象的人体人偶，只作为三维姿态控制草图。必须将其转换为一位自然、完整、有真实皮肤和头发的真人${count === 1 ? '模特' : '人物'}；不保留人偶本身。只生成正面或单一自然视角的一张照片，不得生成三视图、转面图、角色设定表、多姿势展示或多个副本。人体应有自然解剖结构、真实皮肤质感、自然面部和头发，不能是塑料/蜡像/橡胶材质、无面孔假人或 3D 渲染。只保留人偶所表达的姿态、体型比例、人物数量和相对位置；头部和四肢不得复制人偶的僵硬造型。未指定服饰时，为人物穿着合身、完整、不暴露的日常服装。`;
+  const mannequinConstraint = `【真人摄影强制约束】姿态参考是无性别或具象的人体人偶，只作为三维姿态控制草图。必须将其转换为一位自然、完整、有真实皮肤和头发的真人${count === 1 ? '模特' : '人物'}；不保留人偶本身。只生成一个人物、一个机位、一个画面中的单一自然姿势；严禁正面/侧面/背面多视图、转面图、角色设定表、多姿势展示、分栏、重复人物或同一人副本。人体应有自然解剖结构、真实皮肤质感、自然面部和头发，不能是塑料/蜡像/橡胶材质、无面孔假人或 3D 渲染。只保留人偶所表达的姿态、体型比例、人物数量和相对位置；头部和四肢不得复制人偶的僵硬造型。左右上臂、前臂、肘部、手腕和手掌必须连续且解剖正确；每侧只有一条手臂、一个肘关节、一只手腕和一只手，手掌与手指清晰自然，左右手不得融合、断裂、粘连或重复。尤其当手臂抬起或弯到头部附近时，双臂仍须各自从肩部连续连接到对应手掌，不能额外生成手臂、手或人物。未指定服饰时，为人物穿着合身、完整、不暴露的日常服装。`;
   const stages = [{
     kind: 'body', label: '生成形体', reference: poseImage || null,
     prompt: `${mannequinConstraint}\n${countConstraint}\n${bodyText}\n【第 1 步：生成形体】${poseImage ? '图片 1（<image1>）是当前姿态与体型参考。把其中每个人偶替换为自然真人，只保留姿态、体型比例、相对位置与单一相机视角。忽略并丢弃人偶的脸、光头、肤色、裸露身体、材质和展示形式；不得输出三视图或多个角度。' : '按用户文字生成真人形体与构图。'}\n人物资料：${JSON.stringify(people)}。${posePrompt}\n${countConstraint}`,

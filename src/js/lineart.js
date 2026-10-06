@@ -235,8 +235,8 @@ export class LineArtRenderer {
   }
 
   // Compute a camera crop (setViewOffset) that frames the figure in a square
-  frameCamera(camera, padding = 0.08, aspect = 1) {
-    const pts = (this.figures || [this.mannequin]).filter(m => m.group.visible).flatMap(m => m.worldPoints(3));
+  frameCamera(camera, padding = 0.08, aspect = 1, onlyFigure = null) {
+    const pts = (this.figures || [this.mannequin]).filter(m => onlyFigure ? m === onlyFigure : m.group.visible).flatMap(m => m.worldPoints(3));
     camera.clearViewOffset();
     camera.updateMatrixWorld();
     camera.updateProjectionMatrix();
@@ -262,33 +262,35 @@ export class LineArtRenderer {
   }
 
   // Render an image of the figure. Returns a canvas.
-  renderImage(camera, { width = 1024, height = 1024, padding = 0.08, transparent = false, frame = true, lineScale = 1 } = {}) {
+  renderImage(camera, { width = 1024, height = 1024, padding = 0.08, transparent = false, frame = true, lineScale = 1, onlyFigure = null } = {}) {
     const r = this.renderer;
     const cam = camera.clone();
-    if (frame) this.frameCamera(cam, padding, width / height);
-    else { cam.aspect = width / height; cam.updateProjectionMatrix(); }
-
-    const idT = this._makeTarget(width, height);
-    const outT = new THREE.WebGLRenderTarget(width, height, { type: THREE.UnsignedByteType });
-    // scale line width relative to a 1024px reference so exports look consistent
-    const pixelScale = (Math.min(width, height) / 512) * lineScale;
-    this.render(cam, outT, { idTarget: idT, pixelScale, selection: false, bgAlpha: transparent ? 0 : 1 });
-
-    const buf = new Uint8Array(width * height * 4);
-    r.readRenderTargetPixels(outT, 0, 0, width, height, buf);
-    idT.dispose(); idT.depthTexture.dispose(); outT.dispose();
-    r.setRenderTarget(null);
-
-    const canvas = document.createElement('canvas');
-    canvas.width = width; canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    const img = ctx.createImageData(width, height);
-    // flip Y
-    for (let y = 0; y < height; y++) {
-      const src = (height - 1 - y) * width * 4;
-      img.data.set(buf.subarray(src, src + width * 4), y * width * 4);
+    const figures = this.figures || [this.mannequin], visibility = figures.map(figure => figure.group.visible);
+    let idT, outT;
+    if (onlyFigure) figures.forEach(figure => { figure.group.visible = figure === onlyFigure; });
+    try {
+      if (frame) this.frameCamera(cam, padding, width / height, onlyFigure);
+      else { cam.aspect = width / height; cam.updateProjectionMatrix(); }
+      idT = this._makeTarget(width, height);
+      outT = new THREE.WebGLRenderTarget(width, height, { type: THREE.UnsignedByteType });
+      const pixelScale = (Math.min(width, height) / 512) * lineScale;
+      this.render(cam, outT, { idTarget: idT, pixelScale, selection: false, bgAlpha: transparent ? 0 : 1 });
+      const buf = new Uint8Array(width * height * 4);
+      r.readRenderTargetPixels(outT, 0, 0, width, height, buf);
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      const img = ctx.createImageData(width, height);
+      for (let y = 0; y < height; y++) {
+        const src = (height - 1 - y) * width * 4;
+        img.data.set(buf.subarray(src, src + width * 4), y * width * 4);
+      }
+      ctx.putImageData(img, 0, 0);
+      return canvas;
+    } finally {
+      idT?.dispose(); idT?.depthTexture.dispose(); outT?.dispose();
+      r.setRenderTarget(null);
+      if (onlyFigure) figures.forEach((figure, index) => { figure.group.visible = visibility[index]; });
     }
-    ctx.putImageData(img, 0, 0);
-    return canvas;
   }
 }

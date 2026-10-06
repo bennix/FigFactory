@@ -831,22 +831,25 @@ setView('front');
 requestAnimationFrame(frame);
 window.__bf = { get mannequin() { return mannequin; }, figures, setFigureCount, activateFigure, snapshot, openPoseEditor, returnToStudio, art, camera, controls, animateToPose, PRESETS, setView, selectBone };
 
+function createPoseReference({ numbered = true, singleFigure = false } = {}) {
+  if (state.tween) stepTween(state.tween.t0 + state.tween.duration);
+  const { w, h } = parseSize(), padding = Number($('#exp-pad').value);
+  const image = art.renderImage(camera, { width: w, height: h, padding, onlyFigure: singleFigure && figures.length === 1 ? figures[0] : null });
+  const projection = camera.clone(); art.frameCamera(projection, padding, w / h);
+  const ctx = image.getContext('2d'), radius = Math.min(w, h) * 0.018;
+  if (numbered) figures.forEach((m, i) => {
+    const point = m.bones.head.getWorldPosition(new THREE.Vector3()).project(projection);
+    const x = (point.x + 1) / 2 * w, y = (1 - point.y) / 2 * h;
+    ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fillStyle = '#4aa3ff'; ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = `bold ${radius * 1.4}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(i + 1), x, y);
+  });
+  return image.toDataURL('image/png');
+}
+window.__bf.poseImage = createPoseReference;
+
 import { setupAI } from './ai.js';
 setupAI({
-  poseImage: ({ numbered = true } = {}) => {
-    if (state.tween) stepTween(state.tween.t0 + state.tween.duration);
-    const { w, h } = parseSize(), padding = Number($('#exp-pad').value);
-    const image = art.renderImage(camera, { width: w, height: h, padding });
-    const projection = camera.clone(); art.frameCamera(projection, padding, w / h);
-    const ctx = image.getContext('2d'), radius = Math.min(w, h) * 0.018;
-    if (numbered) figures.forEach((m, i) => {
-      const point = m.bones.head.getWorldPosition(new THREE.Vector3()).project(projection);
-      const x = (point.x + 1) / 2 * w, y = (1 - point.y) / 2 * h;
-      ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fillStyle = '#4aa3ff'; ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.font = `bold ${radius * 1.4}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(i + 1), x, y);
-    });
-    return image.toDataURL('image/png');
-  },
+  poseImage: createPoseReference,
   characters: () => figures.map((m, i) => {
     const { w, h } = parseSize();
     const projection = camera.clone(); art.frameCamera(projection, Number($('#exp-pad').value), w / h);

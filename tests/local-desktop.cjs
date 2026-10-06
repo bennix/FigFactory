@@ -17,10 +17,13 @@ app.whenReady().then(async()=>{
  for(let i=0;i<100;i++){if(await run(`document.querySelector('#local-dit').options.length>0`))break;await sleep(100);}
  assert.equal(await run(`document.querySelector('#local-dit').value`),'dit-Q4_K_M');
  assert.equal(await run(`document.querySelector('#btn-optimize').disabled`),false);
+ await run(`window.__bf.setFigureCount(1);window.__bf.poseReferenceAudit=[];const originalPoseRender=window.__bf.art.renderImage.bind(window.__bf.art);window.__bf.art.renderImage=(camera,options)=>{window.__bf.poseReferenceAudit.push({onlyFigure:options.onlyFigure,figures:window.__bf.figures});return originalPoseRender(camera,options);};void 0`);
  await run(`document.querySelector('#ai-prompt').value='Fully clothed person in a cafe';document.querySelector('#ai-use-pose').checked=true;document.querySelector('#btn-generate').click();void 0`);
  for(let i=0;i<100;i++){if(await run(`!document.querySelector('#btn-generate').disabled`))break;await sleep(100);}
  assert.equal(requests.length,1);assert.equal(requests[0].images.length,1);assert.equal(requests[0].dit,'dit-Q4_K_M');
  assert.ok(requests[0].prompt.includes('当前姿态'));assert.equal(await run(`document.querySelector('#studio-history-count').textContent`),'1');
+ const poseAudit=await run(`window.__bf.poseReferenceAudit.filter(entry=>entry.onlyFigure).map(entry=>entry.figures.length)`);assert.deepEqual(poseAudit,[1]);
+ assert.ok(requests[0].prompt.includes('单一自然姿势')&&requests[0].prompt.includes('左右上臂、前臂、肘部')&&requests[0].prompt.includes('不得输出三视图'));
  assert.equal(textRequests.length,0);
  assert.equal((await run(`window.bodyFactory.saveAISettings({apiKey:'fixture-local-text-key'})`)).ok,true);
  await run(`document.querySelector('#ai-prompt').value='A studio portrait';document.querySelector('#btn-optimize').click();void 0`);

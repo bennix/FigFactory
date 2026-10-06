@@ -617,7 +617,7 @@ export async function setupAI({ poseImage, characters, toast }) {
     if (face) identityAnchors();
     checkGenerationReferences(model, [], activeReferences);
     const stages = buildLocalStages({ text, bodyText, people, references: activeReferences, face, clothing, scene,
-      poseImage: $('#ai-use-pose').checked ? poseImage() : null,
+      poseImage: $('#ai-use-pose').checked ? poseImage({ numbered: false, singleFigure: people.length === 1 }) : null,
       posePrompt: $('#ai-use-pose').checked ? $('#ai-pose-prompt').value.trim() : '',
       clothingPrompt: $('#ai-clothing-prompt').value.trim(),
       scenePrompt: [$('#ai-scene-source').value, $('#ai-lighting-source').value, $('#ai-scene-prompt').value].filter(Boolean).join('\n'),
